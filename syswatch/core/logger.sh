@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 
-LOG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/logs"
+LOG_FILE="logs/system.log"
 
-log_event() {
+log_info() {
+echo "$(date '+%Y-%m-%d %H:%M:%S') [INFO] $1" >> "$LOG_FILE"
+}
 
-TYPE=$1
-MESSAGE=$2
+log_warning() {
+echo "$(date '+%Y-%m-%d %H:%M:%S') [WARNING] $1" >> "$LOG_FILE"
+}
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') [$TYPE] $MESSAGE" >> "$LOG_DIR/system.log"
-
+log_critical() {
+echo "$(date '+%Y-%m-%d %H:%M:%S') [CRITICAL] $1" >> "$LOG_FILE"
 }

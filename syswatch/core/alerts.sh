@@ -1,25 +1,19 @@
 #!/usr/bin/env bash
 
-alert() {
+source core/logger.sh
 
-LEVEL=$1
-MESSAGE=$2
-
-case $LEVEL in
-INFO)
-echo "[INFO] $MESSAGE"
-;;
-
-WARNING)
-echo "[WARNING] $MESSAGE"
-;;
-
-CRITICAL)
-echo "[CRITICAL] $MESSAGE"
-printf '\a'
-;;
-
-esac
-
+alert_info() {
+echo "[INFO] $1"
+log_info "$1"
 }
 
+alert_warning() {
+echo "[WARNING] $1"
+log_warning "$1"
+}
+
+alert_critical() {
+echo "[CRITICAL] $1"
+log_critical "$1"
+printf '\a'
+}

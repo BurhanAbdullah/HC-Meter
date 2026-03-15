@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+case "$1" in
+
+run)
+bash "$BASE_DIR/core/engine.sh"
+;;
+
+live)
+
+while true
+do
+clear
+bash "$BASE_DIR/core/engine.sh"
+sleep 10
+done
+;;
+
+help)
+
+echo "SYSWATCH COMMANDS"
+echo
+echo "syswatch run   Run one security scan"
+echo "syswatch live  Continuous monitoring"
+;;
+
+*)
+
+echo "Use: syswatch help"
+;;
+
+esac

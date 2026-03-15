@@ -2,12 +2,8 @@
 
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-source "$BASE_DIR/core/threat_score.sh"
-
-reset_score
-
 echo
-echo "════ SYSWATCH ENGINE ════"
+echo "SYSWATCH Engine Starting"
 
 for module in "$BASE_DIR/modules/"*.sh
 do
@@ -16,9 +12,5 @@ do
     fi
 done
 
-score=$(get_score)
-
-bash "$BASE_DIR/core/threat_level.sh" "$score"
-
 echo
-echo "Modules complete."
+echo "All modules executed"
