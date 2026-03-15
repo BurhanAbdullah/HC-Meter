@@ -1,0 +1,35 @@
+K	BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+case "$1" in
+    vitals)
+        bash "$BASE_DIR/modules/vitals.sh"
+        ;;
+    security)
+        bash "$BASE_DIR/modules/security.sh"
+        ;;
+    score)
+        bash "$BASE_DIR/modules/vulnscore.sh"
+        ;;
+    once)
+        bash "$BASE_DIR/modules/vulnscore.sh"
+        ;;
+    help)
+        echo
+        echo "SYSWATCH COMMANDS"
+        echo
+        echo "syswatch            Full monitor"
+        echo "syswatch once       Single run"
+        echo "syswatch vitals     Hardware stats"
+        echo "syswatch security   Security checks"
+        echo "syswatch score      Vulnerability score"
+        echo "syswatch uninstall  Remove tool"
+        echo
+        ;;
+    uninstall)
+        rm -f ~/.local/bin/syswatch
+        echo "SYSWATCH removed"
+        ;;
+    *)
+        bash "$BASE_DIR/modules/vulnscore.sh"
+        ;;
+esac

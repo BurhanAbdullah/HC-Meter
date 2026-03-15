@@ -1,0 +1,11 @@
+logs)
+bash "$BASE_DIR/modules/log_monitor.sh"
+;;
+
+integrity)
+bash "$BASE_DIR/modules/file_integrity.sh"
+;;
+
+rootkit)
+bash "$BASE_DIR/modules/rootkit_scan.sh"
+;;

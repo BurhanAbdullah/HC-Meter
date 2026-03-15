@@ -1,0 +1,12 @@
+# Logs
+logs/*.log
+
+# Integrity database
+database/*.db
+
+# Temporary files
+*.tmp
+*.swp
+
+# OS files
+.DS_Store
