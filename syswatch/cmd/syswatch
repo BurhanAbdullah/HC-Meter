@@ -5,30 +5,28 @@ BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 case "$1" in
 
 run)
-bash "$BASE_DIR/core/engine.sh"
+    bash "$BASE_DIR/core/engine.sh"
 ;;
-
 live)
-
-while true
-do
-clear
-bash "$BASE_DIR/core/engine.sh"
-sleep 10
-done
+bash "$BASE_DIR/modules/live_dashboard.sh"
+;;
+daemon)
+    bash "$BASE_DIR/core/syswatchd.sh"
 ;;
 
-help)
-
-echo "SYSWATCH COMMANDS"
-echo
-echo "syswatch run   Run one security scan"
-echo "syswatch live  Continuous monitoring"
+help|"")
+    echo
+    echo "SYSWATCH COMMANDS"
+    echo
+    echo "syswatch run        Run full security scan"
+    echo "syswatch daemon     Start continuous monitoring"
+    echo "syswatch help       Show this help menu"
+    echo
 ;;
 
 *)
-
-echo "Use: syswatch help"
+    echo "Unknown command"
+    echo "Run: syswatch help"
 ;;
 
 esac

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>SYSWATCH Dashboard</title>
+<style>
+
+body{
+font-family:Arial;
+background:#111;
+color:#eee;
+padding:20px;
+}
+
+.card{
+background:#222;
+padding:20px;
+margin:10px;
+border-radius:10px;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>SYSWATCH Security Dashboard</h1>
+
+<div class="card">CPU: <span id="cpu"></span>%</div>
+<div class="card">Memory: <span id="mem"></span>%</div>
+<div class="card">Disk: <span id="disk"></span></div>
+
+<script>
+
+async function update(){
+
+let res = await fetch("/metrics")
+let data = await res.json()
+
+document.getElementById("cpu").innerText=data.cpu
+document.getElementById("mem").innerText=data.memory
+document.getElementById("disk").innerText=data.disk
+
+}
+
+setInterval(update,2000)
+update()
+
+</script>
+
+</body>
+</html>
