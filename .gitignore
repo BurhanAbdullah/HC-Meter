@@ -10,3 +10,8 @@ database/*.db
 
 # OS files
 .DS_Store
+logs/
+database/
+*.db
+*.log
+*.save
