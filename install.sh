@@ -4,6 +4,7 @@ set -euo pipefail
 APP_NAME="syswatch"
 PREFIX="/opt/syswatch"
 BIN="/usr/local/bin/syswatch"
+SIGNAL_BIN="/usr/local/bin/syswatch-signal"
 SERVICE="/etc/systemd/system/syswatch.service"
 REPO="https://github.com/BurhanAbdullah/Syswatch.git"
 
@@ -14,6 +15,7 @@ fi
 
 command -v git >/dev/null || { echo "git is required"; exit 1; }
 command -v python3 >/dev/null || { echo "python3 is required"; exit 1; }
+command -v systemctl >/dev/null || { echo "systemd/systemctl is required"; exit 1; }
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -39,6 +41,13 @@ esac
 EOF
 chmod +x "$BIN"
 
+cat > "$SIGNAL_BIN" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exec /usr/bin/python3 /opt/syswatch/syswatch/agents/feed_signal.py "$@"
+EOF
+chmod +x "$SIGNAL_BIN"
+
 cat > "$SERVICE" <<EOF
 [Unit]
 Description=SYSWATCH Pro Host Security Monitor
@@ -62,7 +71,7 @@ cat > "$PREFIX/uninstall.sh" <<'EOF'
 set -e
 if [[ "$(id -u)" -ne 0 ]]; then echo "Run with sudo"; exit 1; fi
 systemctl disable --now syswatch.service 2>/dev/null || true
-rm -f /etc/systemd/system/syswatch.service /usr/local/bin/syswatch
+rm -f /etc/systemd/system/syswatch.service /usr/local/bin/syswatch /usr/local/bin/syswatch-signal
 rm -rf /opt/syswatch
 systemctl daemon-reload
 echo "SYSWATCH removed."
@@ -76,3 +85,4 @@ echo
 printf 'SYSWATCH PRO installed successfully.\n'
 printf 'Dashboard: http://127.0.0.1:8080\n'
 printf 'Commands: syswatch {start|stop|restart|status|logs|open|uninstall}\n'
+printf 'Signal bridge: syswatch-signal SIGNAL "details"\n'
