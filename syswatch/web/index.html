@@ -1,51 +1,37 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-<title>SYSWATCH Dashboard</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#070b14">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<title>SYSWATCH PRO</title>
 <style>
-
-body{
-font-family:Arial;
-background:#111;
-color:#eee;
-padding:20px;
-}
-
-.card{
-background:#222;
-padding:20px;
-margin:10px;
-border-radius:10px;
-}
-
+:root{--bg:#070b14;--panel:#0d1422;--panel2:#111b2d;--text:#eef4ff;--muted:#8b9ab4;--line:#1d2a40;--accent:#67e8f9;--good:#4ade80;--warn:#fbbf24;--bad:#fb7185}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% -10%,#16304a 0,#070b14 42%);color:var(--text);font:14px/1.5 Inter,system-ui,-apple-system,Segoe UI,sans-serif}button{font:inherit}.shell{max-width:1180px;margin:auto;padding:28px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px}.brand{display:flex;align-items:center;gap:13px}.logo{width:44px;height:44px}.brand h1{font-size:20px;margin:0;letter-spacing:.12em}.brand small{color:var(--muted)}.actions{display:flex;gap:10px}.btn{border:1px solid var(--line);background:var(--panel);color:var(--text);padding:10px 14px;border-radius:10px;cursor:pointer}.btn.primary{background:var(--accent);color:#061018;border-color:var(--accent);font-weight:750}.status{display:inline-flex;align-items:center;gap:7px;color:var(--good);font-weight:650}.dot{width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 12px currentColor}.hero{border:1px solid var(--line);background:linear-gradient(135deg,#101c30,#0b111d);border-radius:18px;padding:24px;margin-bottom:18px}.hero h2{font-size:28px;margin:0 0 5px}.hero p{margin:0;color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card{border:1px solid var(--line);background:rgba(13,20,34,.9);border-radius:15px;padding:18px}.label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}.value{font-size:29px;font-weight:750;margin-top:8px}.bar{height:6px;background:#1b2638;border-radius:99px;margin-top:13px;overflow:hidden}.bar i{display:block;height:100%;background:var(--accent);border-radius:99px;width:0;transition:width .4s}.section{margin-top:18px}.section h3{margin:0 0 10px}.wide{display:grid;grid-template-columns:1.4fr .8fr;gap:14px}.mono{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:#b7c6dd;white-space:pre-wrap;max-height:240px;overflow:auto}.scan{min-height:160px;display:flex;flex-direction:column;justify-content:space-between}.result{color:var(--muted);margin-top:10px}.ok{color:var(--good)}.err{color:var(--bad)}footer{color:var(--muted);text-align:center;padding:28px 0 10px}@media(max-width:850px){.grid{grid-template-columns:repeat(2,1fr)}.wide{grid-template-columns:1fr}.shell{padding:18px}}@media(max-width:520px){.top{align-items:flex-start}.actions .btn:not(.primary){display:none}.grid{grid-template-columns:1fr 1fr}.value{font-size:23px}}
 </style>
 </head>
-
 <body>
-
-<h1>SYSWATCH Security Dashboard</h1>
-
-<div class="card">CPU: <span id="cpu"></span>%</div>
-<div class="card">Memory: <span id="mem"></span>%</div>
-<div class="card">Disk: <span id="disk"></span></div>
-
+<div class="shell">
+<header class="top"><div class="brand"><img class="logo" src="/icon.svg"><div><h1>SYSWATCH PRO</h1><small>Host security & intrusion monitoring</small></div></div><div class="actions"><button class="btn" onclick="location.reload()">Refresh</button><button class="btn primary" onclick="runScan()">Run security scan</button></div></header>
+<section class="hero"><div class="status"><span class="dot"></span><span id="service">Protection service online</span></div><h2>Security overview</h2><p id="host">Connecting to local host…</p></section>
+<section class="grid">
+<div class="card"><div class="label">CPU</div><div class="value"><span id="cpu">—</span>%</div><div class="bar"><i id="cpuBar"></i></div></div>
+<div class="card"><div class="label">Memory</div><div class="value"><span id="mem">—</span>%</div><div class="bar"><i id="memBar"></i></div></div>
+<div class="card"><div class="label">Disk</div><div class="value"><span id="disk">—</span>%</div><div class="bar"><i id="diskBar"></i></div></div>
+<div class="card"><div class="label">Processes</div><div class="value" id="processes">—</div><div class="result">active system processes</div></div>
+</section>
+<section class="wide section">
+<div class="card"><h3>Listening network endpoints</h3><div class="mono" id="ports">Loading…</div></div>
+<div class="card scan"><div><h3>Security scan</h3><div class="result" id="scanResult">Run a scan to inspect the host with the existing SYSWATCH engine.</div></div><button class="btn primary" onclick="runScan()">Scan now</button></div>
+</section>
+<footer>SYSWATCH PRO • Local-first monitoring • No cloud account required</footer>
+</div>
 <script>
-
-async function update(){
-
-let res = await fetch("/metrics")
-let data = await res.json()
-
-document.getElementById("cpu").innerText=data.cpu
-document.getElementById("mem").innerText=data.memory
-document.getElementById("disk").innerText=data.disk
-
-}
-
-setInterval(update,2000)
-update()
-
+async function load(){try{const r=await fetch('/api/metrics',{cache:'no-store'});if(!r.ok)throw Error();const d=await r.json();set('cpu',d.cpu);set('mem',d.memory);set('disk',d.disk);set('processes',d.processes);set('host',`${d.hostname} · ${d.platform} · ${new Date(d.timestamp*1000).toLocaleTimeString()}`);bar('cpuBar',d.cpu);bar('memBar',d.memory);bar('diskBar',d.disk);document.getElementById('ports').textContent=d.ports.length?d.ports.join('\n'):'No listening endpoints detected';document.getElementById('service').textContent='Protection service online'}catch(e){document.getElementById('service').textContent='Service unavailable';document.getElementById('service').parentElement.style.color='var(--bad)'}}
+function set(id,v){document.getElementById(id).textContent=v}function bar(id,v){document.getElementById(id).style.width=Math.min(100,Math.max(0,Number(v)))+'%'}
+async function runScan(){const el=document.getElementById('scanResult');el.className='result';el.textContent='Running security scan…';try{const r=await fetch('/api/scan');const d=await r.json();el.className=d.ok?'result ok':'result err';el.textContent=d.ok?'Scan completed successfully.':'Scan completed with findings or an error.'+(d.error?' '+d.error:'');if(d.output){el.textContent+='\n\n'+d.output}}catch(e){el.className='result err';el.textContent='Unable to run scan: '+e.message}}
+load();setInterval(load,3000);if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 </script>
-
-</body>
-</html>
+</body></html>
