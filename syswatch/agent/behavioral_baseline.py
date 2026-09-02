@@ -37,7 +37,10 @@ class Baseline:
     def load(self):
         try:
             data = json.loads(self.state.read_text())
-            self.samples = data.get('samples', [])[-MAX_SAMPLES:]
+            if isinstance(data, dict) and isinstance(data.get('samples'), list):
+                self.samples = [x for x in data['samples'] if isinstance(x, dict)][-MAX_SAMPLES:]
+            else:
+                self.samples = []
         except (OSError, ValueError, TypeError):
             self.samples = []
 
@@ -65,8 +68,13 @@ class Baseline:
         deviations = {}
         for k in FEATURES:
             s = stats[k]
-            if s['samples'] < 10 or s['stddev'] < 1e-9:
+            if s['samples'] < 10:
                 deviations[k] = None
+            elif s['stddev'] < 1e-9:
+                # A constant learned baseline is still meaningful: a changed
+                # observation is an unambiguous deviation, while an identical
+                # observation remains normal rather than producing infinity.
+                deviations[k] = 0.0 if abs(sample[k] - s['mean']) < 1e-9 else None
             else:
                 deviations[k] = round(abs(sample[k] - s['mean']) / s['stddev'], 2)
         self.samples.append(sample)
