@@ -1,0 +1,77 @@
+name: Build SYSWATCH release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          ROOT="pkg/syswatch_${VERSION}_amd64"
+          mkdir -p "$ROOT/DEBIAN" "$ROOT/opt/syswatch" "$ROOT/usr/local/bin"
+          cp -a . "$ROOT/opt/syswatch/"
+          cat > "$ROOT/DEBIAN/control" <<EOF
+          Package: syswatch
+          Version: ${VERSION}
+          Section: admin
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Burhan Abdullah
+          Description: SYSWATCH PRO host security monitoring
+           Local-first host security monitoring and intrusion detection dashboard.
+          EOF
+          cat > "$ROOT/DEBIAN/postinst" <<'EOF'
+          #!/bin/sh
+          set -e
+          chmod +x /opt/syswatch/install.sh /opt/syswatch/syswatch/cmd/syswatch 2>/dev/null || true
+          cat > /etc/systemd/system/syswatch.service <<SERVICE
+          [Unit]
+          Description=SYSWATCH Pro Host Security Monitor
+          After=network.target
+          [Service]
+          Type=simple
+          WorkingDirectory=/opt/syswatch
+          ExecStart=/usr/bin/python3 /opt/syswatch/syswatch/api/server.py
+          Restart=on-failure
+          RestartSec=3
+          NoNewPrivileges=true
+          ProtectHome=read-only
+          [Install]
+          WantedBy=multi-user.target
+          SERVICE
+          cat > /usr/local/bin/syswatch <<'CMD'
+          #!/bin/sh
+          case "${1:-start}" in
+            start) systemctl start syswatch.service; echo "SYSWATCH: http://127.0.0.1:8080" ;;
+            stop) systemctl stop syswatch.service ;;
+            restart) systemctl restart syswatch.service ;;
+            status) systemctl --no-pager status syswatch.service ;;
+            logs) journalctl -u syswatch.service -n 100 --no-pager ;;
+            open) xdg-open http://127.0.0.1:8080 2>/dev/null || true ;;
+            *) echo "Usage: syswatch {start|stop|restart|status|logs|open}"; exit 2 ;;
+          esac
+          CMD
+          chmod +x /usr/local/bin/syswatch
+          systemctl daemon-reload
+          systemctl enable syswatch.service
+          systemctl restart syswatch.service || systemctl start syswatch.service
+          EOF
+          chmod 755 "$ROOT/DEBIAN/postinst"
+          dpkg-deb --build "$ROOT"
+          mv "pkg/syswatch_${VERSION}_amd64.deb" .
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: syswatch_*.deb
