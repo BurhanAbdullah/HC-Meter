@@ -23,7 +23,7 @@ class Engine:
   except Exception: pass
  def save(self): self.state.write_text(json.dumps({'events':list(self.events),'chains':self.chains},indent=2))
  def ingest(self,t,detail='',pid=0,port=0):
-  e={'ts':time.time(),'type':t,'detail':detail,'pid':pid,'port':port,'severity':'CRITICAL' if t in ('reverse_shell','new_suid','honeypot_access','mass_file_write') else 'HIGH'}; self.events.append(e); self.evaluate(); self.save(); return e
+  e={'ts':time.time(),'type':t,'detail':detail,'pid':pid,'port':port,'severity':'CRITICAL' if t in ('reverse_shell','new_suid','honeypot_access','mass_file_write') else 'HIGH','confidence':WEIGHT.get(t,.3)}; self.events.append(e); self.evaluate(); self.save(); return e
  def evaluate(self):
   now=time.time(); recent=[e for e in self.events if e['ts']>=now-self.window]; present={e['type'] for e in recent}; active={}
   for name,req in RULES.items():
