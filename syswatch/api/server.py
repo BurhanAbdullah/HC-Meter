@@ -24,6 +24,10 @@ try:
     from filesystem_behavior import collect as filesystem_collect
 except Exception:
     filesystem_collect = lambda **kwargs: {'status': 'UNAVAILABLE', 'files_observed': 0, 'events': {'created': [], 'deleted': [], 'modified': [], 'created_count': 0, 'deleted_count': 0, 'modified_count': 0}}
+try:
+    from prediction_engine import predict as prediction_predict
+except Exception:
+    prediction_predict = lambda: {'status': 'UNAVAILABLE', 'source': 'local_behavior_baseline', 'samples': 0, 'horizon_steps': 0, 'forecasts': {}, 'actions_taken': False, 'security_verdict': 'NONE'}
 
 HOST = os.environ.get('SYSWATCH_HOST', '127.0.0.1')
 PORT = int(os.environ.get('SYSWATCH_PORT', '8080'))
@@ -318,6 +322,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(network_intelligence())
         if path == '/api/filesystem-behavior':
             return self.send_json(filesystem_behavior())
+        if path == '/api/prediction':
+            return self.send_json(prediction_predict())
         if path == '/api/processes':
             return self.send_json({'timestamp': int(time.time()), 'processes': process_lineage()})
         if path == '/api/baseline':
