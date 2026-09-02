@@ -1,52 +1,225 @@
 # SYSWATCH PRO
 
-**Local-first Linux host security agent and Security Operations dashboard.**
+### Endpoint security that understands behavior — not just alerts.
 
-SYSWATCH collects host telemetry, normalizes security signals, correlates related activity in time, and presents the resulting attack chains locally. The project is being built as a real installable endpoint-security product, with conservative defaults and an explicit distinction between tested capabilities and future capabilities.
+**SYSWATCH** is a local-first Linux endpoint-security platform that observes host behavior, connects security signals into temporal attack chains, and gives the operator a live security picture from a single local console.
 
-> **Important:** SYSWATCH is security monitoring software, not a guarantee of complete protection. The current release has deterministic signal correlation and a local dashboard. Independent endpoint-security evaluation is still required before making claims about broad malware coverage or detection rates.
+> **Observe → Correlate → Understand → Respond**
 
-## What SYSWATCH does today
+No cloud account is required for the local dashboard. The project is deliberately transparent about what is implemented, what is tested, and what remains under development.
 
-- Live local SOC dashboard for host state, processes, network endpoints, threat score, causal chains, and event stream.
-- Deterministic temporal correlation of normalized security signals.
-- Persistent local agent state across process restarts.
-- Security-signal CLI bridge for existing collectors/modules.
-- systemd service with automatic restart after failure.
-- Localhost-only dashboard by default (`127.0.0.1:8080`).
-- Low dependency footprint: Python standard library plus existing shell modules.
-- Synthetic adversarial test suite covering multi-stage and noisy attack patterns.
+---
+
+## The product
+
+SYSWATCH is designed around a simple question:
+
+> **What is happening on this machine right now, and does the activity make sense as a whole?**
+
+Instead of presenting every event as an isolated alert, SYSWATCH combines host telemetry, normalized security signals and temporal correlation so that an operator can move from **machine state → security posture → suspicious behavior → causal chain → evidence**.
+
+### What you see after installation
+
+```text
+┌───────────────────────────────────────────────────────────────────┐
+│ SYSWATCH PRO                         ● AGENT ONLINE      14:32:08 │
+│ ENDPOINT SECURITY                                                  │
+├───────────────────────────────────────────────────────────────────┤
+│ ENDPOINT                         SECURITY POSTURE                  │
+│ srv-prod-01                     87 / 100                          │
+│ Ubuntu · Linux · kernel ...     Firewall       ACTIVE             │
+│ Uptime 17d · Load 0.42          Wi-Fi          WPA3               │
+│ Interfaces 3 · Listening 8      SSH            OK                 │
+├────────────┬────────────┬────────────┬────────────────────────────┤
+│ CPU        │ MEMORY     │ DISK       │ THREAT INTELLIGENCE        │
+│ 23%        │ 61%        │ 48%        │ LOW · score 0              │
+│ live graph │ live graph │ live graph │ causal engine              │
+├────────────┴────────────┴────────────┴────────────────────────────┤
+│ RESOURCE TELEMETRY · LAST 60 SAMPLES                              │
+│     ╭──╮                                                         │
+│ ────╯  ╰────╮──────╭────────────────────────                    │
+├──────────────────────────────┬────────────────────────────────────┤
+│ NETWORK SECURITY             │ ACTIVE CAUSAL ATTACK CHAINS       │
+│ wlan0 · WPA3 · -48 dBm       │ SSH → shell → persistence         │
+│ eth0  · up                   │ port → process → C2               │
+├──────────────────────────────┴────────────────────────────────────┤
+│ LIVE SECURITY EVENT STREAM                                       │
+│ 14:31:55 [LOW]  NETWORK — connection observed                    │
+│ 14:31:42 [LOW]  PROCESS — process started                        │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+The values above are **illustrative UI examples**, not measured SYSWATCH output.
+
+---
+
+## Why SYSWATCH?
+
+| Conventional host monitoring | SYSWATCH direction |
+|---|---|
+| Raw machine metrics | Host + security context |
+| Individual alerts | Temporal signal correlation |
+| Process list | Process intelligence and lineage |
+| Open-port list | Network + process attribution |
+| Static checks | Continuous telemetry |
+| Alert severity | Threat score + causal evidence |
+| Cloud-first console | Local-first operation |
+
+The differentiating layer is the attempt to connect **weak signals into coherent behavioral stories** instead of simply increasing the number of alerts.
+
+---
+
+## Live security console
+
+The current dashboard is built as a local browser application and refreshes host telemetry continuously.
+
+### Endpoint identity
+
+- Hostname
+- Operating system / kernel
+- Uptime
+- Load averages
+- Network interfaces
+- Listening endpoints
+- Agent status
+
+### Resource intelligence
+
+- CPU utilization
+- Memory utilization
+- Disk utilization and free space
+- Live session graphs
+- Load trend
+- Process count
+
+### Security posture
+
+Where supported by the host, SYSWATCH surfaces:
+
+- Firewall backend and state
+- Wi-Fi interface, SSID, security mode and signal information
+- SSH configuration posture
+- Active causal chains
+- Security-event history
+
+The dashboard distinguishes unavailable telemetry from healthy telemetry rather than silently inventing a value.
+
+### Network view
+
+- Interface state
+- Wired / wireless classification
+- RX/TX byte counters
+- Wi-Fi security information when available
+- Listening TCP/UDP endpoints
+- Local network state
+
+### Security timeline
+
+The event stream provides a continuously updated view of normalized security events and their severity, while the causal engine groups related events into chains.
+
+---
+
+## Causal attack intelligence
+
+The central detection concept is **causal correlation**.
+
+```text
+              ┌───────────────┐
+              │  INITIAL      │
+              │  ACCESS       │
+              └───────┬───────┘
+                      │
+                      ▼
+              ┌───────────────┐
+              │ PROCESS /     │
+              │ SHELL EVENT   │
+              └───────┬───────┘
+                      │
+                      ▼
+              ┌───────────────┐
+              │ PERSISTENCE / │
+              │ PRIVESC        │
+              └───────┬───────┘
+                      │
+                      ▼
+              ┌───────────────┐
+              │ NETWORK / C2  │
+              └───────┬───────┘
+                      │
+                      ▼
+              ⚠ CAUSAL CHAIN
+```
+
+A single signal can be noisy. A sequence of related signals can be evidence.
+
+SYSWATCH therefore maintains a temporal window, normalizes security events, evaluates known signal combinations and exposes the resulting chain with confidence and context.
+
+This is intentionally deterministic in the current implementation. It is not marketed as an opaque AI detector.
+
+---
 
 ## Architecture
 
-```text
-Linux endpoint
-   │
-   ├── Collectors / sensors
-   │     ├── process + resource telemetry
-   │     ├── network / listening endpoints
-   │     ├── file-integrity events
-   │     ├── persistence / hardening events
-   │     └── malware / honeypot indicators
-   │
-   ├── Signal normalization
-   │     └── NEW-PORT, REVERSE-SHELL, FILE-INTEG, CRON-PERSIST,
-   │         C2-CONNECT, HONEYPOT, PRIVESC, etc.
-   │
-   ├── Causal correlation engine
-   │     ├── temporal window
-   │     ├── multi-signal attack chains
-   │     ├── confidence scoring
-   │     └── persistent state
-   │
-   └── Local SOC dashboard
-         ├── host health
-         ├── threat level
-         ├── causal chains
-         └── event stream
+```mermaid
+flowchart LR
+    A[Linux endpoint] --> B[Collectors / sensors]
+    B --> C[Signal normalization]
+    C --> D[Temporal correlation engine]
+    D --> E[Threat / causal intelligence]
+    E --> F[Local SOC dashboard]
+    D --> G[Persistent local state]
 ```
 
-## Installation — easiest method
+### Telemetry pipeline
+
+```text
+Linux host
+   │
+   ├── Host sensors
+   │     ├── CPU / memory / disk
+   │     ├── process state
+   │     ├── uptime / load
+   │     └── network interfaces
+   │
+   ├── Security sensors
+   │     ├── listening endpoints
+   │     ├── firewall state
+   │     ├── Wi-Fi security
+   │     ├── SSH posture
+   │     └── existing security modules
+   │
+   ▼
+Signal normalization
+   │
+   ├── NEW-PORT
+   ├── REVERSE-SHELL
+   ├── FILE-INTEG
+   ├── CRON-PERSIST
+   ├── C2-CONNECT
+   ├── HONEYPOT
+   └── PRIVESC
+   │
+   ▼
+Causal correlation
+   │
+   ├── temporal window
+   ├── multi-signal chains
+   ├── confidence scoring
+   └── persistent event state
+   │
+   ▼
+Local SOC
+   ├── endpoint identity
+   ├── security posture
+   ├── resource graphs
+   ├── network state
+   ├── attack chains
+   └── live event stream
+```
+
+---
+
+## Install in minutes
 
 ### Requirements
 
@@ -55,16 +228,11 @@ A Linux machine with:
 - `git`
 - `python3`
 - `systemd`
-- root/sudo access
+- root / sudo access
 
-Debian/Ubuntu example:
+Optional host tools such as `ss`, `ufw`, `firewall-cmd`, `nft`, `iw`, and `nmcli` provide richer telemetry when available.
 
-```bash
-sudo apt update
-sudo apt install -y git python3
-```
-
-### Install SYSWATCH
+### Install
 
 ```bash
 git clone https://github.com/BurhanAbdullah/Syswatch.git
@@ -72,49 +240,87 @@ cd Syswatch
 sudo ./install.sh
 ```
 
-The installer places the application under `/opt/syswatch`, creates the `syswatch` command, installs a systemd service, enables it at boot, and starts it.
+The installer places SYSWATCH under `/opt/syswatch`, creates the `syswatch` command, installs a systemd service, enables it at boot, and starts it.
 
-Open the dashboard locally:
+Open:
 
 ```text
 http://127.0.0.1:8080
 ```
 
-Or:
+or:
 
 ```bash
 syswatch open
 ```
 
-### Verify the installation
+### Verify
 
 ```bash
 syswatch status
 syswatch logs
-```
-
-You can also verify the HTTP endpoint without opening a browser:
-
-```bash
 curl -fsS http://127.0.0.1:8080/api/health
 ```
 
-## Daily use
+---
 
-```bash
-syswatch start
-syswatch stop
-syswatch restart
-syswatch status
-syswatch logs
-syswatch open
+## First-run experience
+
+Once the service is running, the dashboard begins collecting local host telemetry automatically.
+
+The recommended workflow is:
+
+```text
+1. Install
+      ↓
+2. Open local console
+      ↓
+3. Confirm endpoint identity
+      ↓
+4. Review security posture
+      ↓
+5. Watch live resource / network telemetry
+      ↓
+6. Run an explicit security scan if required
+      ↓
+7. Feed or collect security signals
+      ↓
+8. Inspect causal chains and event evidence
 ```
 
-The service is intended to run continuously. If it exits unexpectedly, systemd restarts it.
+No destructive response is triggered simply because an alert appears.
 
-## Feed security events into the agent
+---
 
-Security collectors can send normalized signals through the CLI bridge:
+## Live graphs
+
+SYSWATCH now treats visualization as part of the security interface rather than decoration.
+
+The dashboard maintains session history for:
+
+- CPU
+- Memory
+- Disk utilization
+- System load
+
+The next visualization layer is designed to extend this to:
+
+- network RX/TX rate
+- process-count trend
+- threat-score history
+- security-event rate
+- firewall blocks
+- DNS activity
+- anomaly score
+- behavioral-baseline deviation
+
+These should be populated from real host telemetry, not placeholder values.
+
+---
+
+## Feed security events
+
+Existing security modules can send normalized signals through the bridge:
 
 ```bash
 syswatch-signal NEW-PORT "Port 2222 opened"
@@ -126,29 +332,31 @@ syswatch-signal HONEYPOT "credential backup accessed"
 syswatch-signal PRIVESC "new SUID executable"
 ```
 
-The bridge maps the human-readable signal names to the normalized event types used by the correlation engine.
+---
 
-## Try the safe built-in demo
+## Safe built-in demonstration
 
-The demo injects synthetic security telemetry only; it does not attack the host.
+SYSWATCH includes a synthetic demonstration that injects telemetry only; it does **not** attack the host.
 
 ```bash
 cd /opt/syswatch
 bash syswatch/agents/feed_signal.sh --demo
 ```
 
-Then refresh the dashboard. You should see correlated activity rather than isolated alerts.
+Refresh the dashboard and inspect the resulting causal activity.
 
 For development checkouts:
 
 ```bash
 bash syswatch/agents/feed_signal.sh --demo
-python3 -m pytest -q tests/test_causal_engine.py tests/test_adversarial_attack_chains.py
+python3 -m pytest -q
 ```
+
+---
 
 ## Adversarial validation
 
-SYSWATCH now has synthetic tests for:
+The repository contains safe synthetic tests covering:
 
 - reverse-shell establishment;
 - persistence after initial access;
@@ -163,49 +371,76 @@ SYSWATCH now has synthetic tests for:
 - state persistence after restart;
 - multi-stage attacks producing multiple simultaneous chains.
 
-See [`tests/adversarial_scenarios.md`](tests/adversarial_scenarios.md) for the validation matrix and known hard cases.
+No exploit or destructive payload is executed by these tests.
 
-These tests are **not** proof of real-world detection accuracy. They validate the correlation engine against controlled telemetry patterns. Real adversarial validation must use isolated, authorized security labs and representative clean workloads.
+These tests validate controlled telemetry patterns; they are not evidence of universal real-world malware detection accuracy.
 
-## Current detection boundary
+---
 
-The current correlation engine is deliberately conservative. It recognizes normalized signal combinations inside a short temporal window. Therefore, a sophisticated slow-and-low intrusion whose relevant signals are separated beyond that window may not currently correlate. That is a known product gap, not something SYSWATCH should pretend to solve.
+## Security boundary
 
-The next major security-engineering milestones are:
+SYSWATCH is deliberately conservative about its claims.
 
-1. behavioral baseline / host DNA;
-2. process parent-child lineage;
-3. prediction of likely next signals;
-4. richer network and DNS telemetry;
-5. filesystem behavioral monitoring;
-6. policy-driven containment that is reversible and auditable;
-7. tamper resistance and sensor-health monitoring;
-8. signed updates and supply-chain verification;
-9. Debian/Ubuntu/RHEL-family packaging and release validation;
-10. broader cross-platform agent support;
-11. independent red-team and false-positive evaluation.
-
-## Security model and safe defaults
-
-- Dashboard binds to localhost by default.
-- No destructive automated response is enabled by default.
-- Future containment must be policy-driven, least-privilege, auditable, and reversible where practical.
+- It does **not** claim 99.99% detection accuracy.
+- Current causal detection is deterministic and based on normalized signals within a temporal window.
+- Slow-and-low activity separated beyond the current correlation window is a known detection gap.
+- Automated destructive response is not enabled by default.
+- Future containment should be policy-driven, least-privilege, auditable and reversible where practical.
+- The dashboard binds to localhost by default.
 - Do not expose the dashboard publicly without authentication and an explicit network-security design.
-- Do not run adversarial tests against systems you do not own or have authorization to test.
 
-## Uninstall
+---
 
-If installed using `install.sh`:
+## Product roadmap
 
-```bash
-sudo /opt/syswatch/uninstall.sh
+```text
+CURRENT
+  ✓ Local SOC dashboard
+  ✓ Host telemetry
+  ✓ Network endpoints
+  ✓ Firewall / Wi-Fi / SSH posture where available
+  ✓ Temporal causal correlation
+  ✓ Persistent local state
+  ✓ Linux service integration
+  ✓ Synthetic adversarial validation
+
+NEXT
+  □ Behavioral baseline / host DNA
+  □ Process parent-child lineage
+  □ Network + DNS intelligence
+  □ Filesystem behavioral monitoring
+  □ Threat-score history
+  □ Security-event analytics
+  □ Policy engine
+
+PRODUCTIZATION
+  □ Reversible containment
+  □ Sensor health / tamper resistance
+  □ Signed updates
+  □ Debian / Ubuntu / RHEL-family packages
+  □ Release artifacts
+  □ Cross-platform agents
+  □ Independent red-team evaluation
+  □ False-positive benchmarking
 ```
 
-Or:
+---
 
-```bash
-sudo syswatch uninstall
-```
+## Design principles
+
+**Local-first.** The local machine should remain useful even without a cloud account.
+
+**Evidence over hype.** Implemented behavior, test coverage and future work are clearly separated.
+
+**Context over alert volume.** A coherent chain is more useful than a pile of unrelated warnings.
+
+**Safe by default.** Monitoring should not silently become destructive response.
+
+**Inspectable.** The system should be understandable by the operator and auditable by developers.
+
+**Product, not script.** Installation, service lifecycle, dashboard, telemetry, validation and documentation are treated as one system.
+
+---
 
 ## Development
 
@@ -215,15 +450,33 @@ Run the API directly:
 python3 syswatch/api/server.py
 ```
 
-Run the complete current test set:
+Run all tests:
 
 ```bash
 python3 -m pytest -q
 ```
 
+The API is intentionally localhost-bound by default and uses request-trust checks and security headers for the local dashboard boundary.
+
+---
+
+## Uninstall
+
+```bash
+sudo /opt/syswatch/uninstall.sh
+```
+
+or:
+
+```bash
+sudo syswatch uninstall
+```
+
+---
+
 ## Project status
 
-SYSWATCH is under active development toward a production endpoint-security platform. The repository documents implemented behavior separately from planned capabilities so users can evaluate the product honestly.
+SYSWATCH is under active development toward a production endpoint-security platform. The repository intentionally distinguishes **implemented capabilities**, **validated behavior**, **known limitations**, and **future product milestones**.
 
 ## License
 
