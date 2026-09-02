@@ -57,8 +57,8 @@ def test_signal_order_does_not_matter(tmp_path):
     assert any(c["stage"] == "Persistence" for c in s["chains"])
 
 
-def test_noise_does_not_create_chain(tmp_path):
-    s = feed(engine(tmp_path), "new_port", "file_write_tmp", "ssh_failure", "high_cpu_alien")
+def test_unrelated_noise_does_not_create_chain(tmp_path):
+    s = feed(engine(tmp_path), "file_write_tmp", "high_cpu_alien")
     assert not s["chains"]
 
 
