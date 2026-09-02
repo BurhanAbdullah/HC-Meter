@@ -1,21 +1,45 @@
 # SYSWATCH PRO
 
-**Local-first host security monitoring and intrusion detection for Linux.**
+**Local-first host security agent and security operations dashboard for Linux.**
 
-SYSWATCH PRO turns the existing modular security engine into a usable product: one-command installation, a local web application, continuous background monitoring, live host metrics, network visibility, and on-demand security scans. The core project remains modular and extensible.
+SYSWATCH combines continuous host telemetry, deterministic security checks, behavioral correlation and a persistent causal-analysis layer. It is designed to become an installable endpoint-security product without requiring a cloud account.
 
-## What users get
+## Current product
 
-- **Live dashboard** — CPU, memory, disk, process count, host identity and listening endpoints.
-- **Security scan** — runs the existing SYSWATCH security engine from the dashboard.
-- **Continuous service** — systemd keeps SYSWATCH running and restarts it after failures.
-- **Local-first** — dashboard is bound to `127.0.0.1` by default; no account or cloud service is required.
-- **Installable app** — Debian packages can be built from tagged releases, and the repository includes a one-command installer.
-- **PWA shell** — the dashboard can be installed from a compatible browser and retains its application shell offline.
+- **Security Operations dashboard** — live CPU, memory, disk, processes, listening endpoints, threat level, causal chains and event stream.
+- **Causal detection agent** — correlates security signals inside a temporal window instead of treating alerts independently.
+- **Persistent telemetry state** — behavioral events survive process restarts through a local JSON state store.
+- **Continuous service** — systemd restarts the local API after failures.
+- **Local-first** — dashboard binds to `127.0.0.1` by default.
+- **Low dependency footprint** — Python standard library + existing Bash modules.
+- **CLI signal bridge** — security modules can feed normalized signals into the agent.
 
-The underlying engine covers system monitoring, suspicious-process detection, network analysis, hardening checks, file-integrity monitoring, environment awareness and threat assessment.
+## Architecture
 
-## Install from source
+```text
+Linux host
+  │
+  ├── Collectors / existing security modules
+  │      ├── process + resource telemetry
+  │      ├── network / connection telemetry
+  │      ├── file integrity
+  │      ├── persistence / hardening
+  │      └── malware indicators
+  │
+  ├── Agent correlation layer
+  │      ├── temporal signal window
+  │      ├── causal attack-chain detection
+  │      ├── confidence scoring
+  │      └── persistent event state
+  │
+  └── Local SOC dashboard
+         ├── live host state
+         ├── threat score / level
+         ├── causal chains
+         └── event stream
+```
+
+## Install
 
 ```bash
 git clone https://github.com/BurhanAbdullah/Syswatch.git
@@ -23,9 +47,9 @@ cd Syswatch
 sudo ./install.sh
 ```
 
-Then open **http://127.0.0.1:8080**.
+Then open `http://127.0.0.1:8080`.
 
-Useful commands:
+Commands:
 
 ```text
 syswatch start
@@ -36,49 +60,34 @@ syswatch logs
 syswatch open
 ```
 
-## Install from a Debian release
-
-Download the `.deb` package from the repository's Releases page and install it with:
+## Feed the agent
 
 ```bash
-sudo apt install ./syswatch_<version>_amd64.deb
+syswatch-signal NEW-PORT "Port 2222 opened"
+syswatch-signal REVERSE-SHELL "bash spawned by unexpected parent"
+syswatch-signal CRON-PERSIST "new scheduled task"
 ```
 
-The package installs the background service and the `syswatch` command. The dashboard is available at `http://127.0.0.1:8080`.
+Run a complete local correlation demonstration:
 
-## Product architecture
-
-```text
-Linux host
-   │
-   ├── SYSWATCH engine (existing modular Bash modules)
-   │       ├── system / process monitoring
-   │       ├── network analysis
-   │       ├── hardening inspection
-   │       ├── file integrity
-   │       └── threat assessment
-   │
-   └── Local API + Web App (Python stdlib)
-           ├── live metrics
-           ├── listening endpoints
-           └── on-demand security scan
+```bash
+bash syswatch/agents/feed_signal.sh --demo
 ```
 
-The web application is intentionally dependency-light: the server uses Python's standard library, while the dashboard is plain HTML/CSS/JavaScript. This makes the local deployment small and easy to audit.
+## Important security boundary
 
-## Security model
+SYSWATCH does **not** claim 99.99% detection accuracy. Real endpoint-security effectiveness depends on operating system coverage, telemetry quality, adversarial testing, false-positive controls, kernel visibility, update cadence and independent evaluation. Automated destructive response is deliberately not enabled by default. Any future containment engine should be policy-driven, auditable, least-privilege and reversible where possible.
 
-SYSWATCH is a monitoring and auditing product, not a replacement for an endpoint protection platform. The default dashboard binds to localhost. Review service permissions and hardening settings before deploying it to production servers, and do not expose port 8080 publicly without an authenticated reverse proxy and an explicit security policy.
+Do not expose the dashboard publicly without authentication and an explicit network-security policy.
 
 ## Development
 
-Run the dashboard directly:
-
 ```bash
 python3 syswatch/api/server.py
+python3 -m pytest tests/test_causal_engine.py
 ```
 
-Open `http://127.0.0.1:8080` and use **Run security scan** to exercise the existing engine.
+The project is being developed toward a production endpoint-security platform: broader telemetry, signed updates, policy management, isolation/containment, tamper resistance, cross-platform agents, installer packages and independent security evaluation are next milestones.
 
 ## License
 
