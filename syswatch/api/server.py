@@ -162,6 +162,60 @@ def load_metrics():
         return {'1m': 0, '5m': 0, '15m': 0}
 
 
+def _proc_status(pid):
+    values = {}
+    try:
+        for line in (Path('/proc') / str(pid) / 'status').read_text(errors='ignore').splitlines():
+            if ':' in line:
+                k, v = line.split(':', 1)
+                values[k] = v.strip()
+    except OSError:
+        return values
+    return values
+
+
+def process_lineage(limit=250):
+    """Return a bounded, read-only process tree without exposing command lines."""
+    result = []
+    proc = Path('/proc')
+    for p in proc.iterdir() if proc.exists() else []:
+        if not p.name.isdigit():
+            continue
+        pid = int(p.name)
+        status = _proc_status(pid)
+        if not status:
+            continue
+        try:
+            stat = (p / 'stat').read_text(errors='ignore')
+            close = stat.rfind(')')
+            fields = stat[close + 2:].split() if close >= 0 else []
+            ppid = int(fields[1]) if len(fields) > 1 else 0
+            state = fields[0] if fields else '?'
+        except (OSError, ValueError):
+            continue
+        try:
+            exe = os.readlink(p / 'exe')
+        except OSError:
+            exe = status.get('Name', 'unknown')
+        uid = status.get('Uid', '0').split()[0]
+        try:
+            user = cmd(['getent', 'passwd', uid], timeout=0.5).split(':', 1)[0] or uid
+        except Exception:
+            user = uid
+        try:
+            start_ticks = int(fields[19]) if len(fields) > 19 else 0
+            hz = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+            boot = float(Path('/proc/stat').read_text().split('btime ', 1)[1].splitlines()[0]) if 'btime ' in Path('/proc/stat').read_text() else time.time()
+            start_time = round(boot + start_ticks / hz, 3)
+        except Exception:
+            start_time = 0
+        result.append({'pid': pid, 'ppid': ppid, 'state': state, 'name': status.get('Name', 'unknown'), 'exe': exe, 'user': user, 'start_time': start_time})
+        if len(result) >= limit:
+            break
+    result.sort(key=lambda x: (x['ppid'], x['pid']))
+    return result
+
+
 def metrics():
     d = shutil.disk_usage('/')
     interfaces = network_interfaces()
@@ -237,6 +291,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'ok': True, 'service': 'syswatch', 'agent': 'online'})
         if path == '/api/metrics':
             return self.send_json(metrics())
+        if path == '/api/processes':
+            return self.send_json({'timestamp': int(time.time()), 'processes': process_lineage()})
         if path == '/api/agent':
             return self.send_json(agent_summary())
         if path == '/api/scan':
