@@ -276,13 +276,21 @@ def policy_evidence():
         return {'status': 'UNAVAILABLE', 'source': 'local_evidence', 'evidence_count': 0, 'decisions': [], 'actions_taken': False, 'security_verdict': 'NONE'}
     evidence = []
     summary = agent_summary()
+    try:
+        from causal_engine import WEIGHT as causal_signal_weights
+    except Exception:
+        causal_signal_weights = {}
     for event in (summary.get('events') or [])[-256:]:
         if not isinstance(event, dict):
             continue
+        signal_type = event.get('type')
+        confidence = event.get('confidence')
+        if not isinstance(confidence, (int, float)):
+            confidence = causal_signal_weights.get(signal_type, 0.3)
         evidence.append({
-            'type': event.get('type'),
+            'type': signal_type,
             'severity': event.get('severity', 'INFO'),
-            'confidence': event.get('confidence', 0.0),
+            'confidence': max(0.0, min(1.0, float(confidence))),
             'source': 'causal_engine',
         })
     network = network_intelligence()
