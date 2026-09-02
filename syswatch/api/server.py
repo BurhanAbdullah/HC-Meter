@@ -271,7 +271,7 @@ def metrics():
 
 
 def policy_evidence():
-    """Build bounded, local evidence for policy evaluation without inferring threats."""
+    """Evaluate bounded local evidence without triggering stateful collectors."""
     if policy_evaluate is None:
         return {'status': 'UNAVAILABLE', 'source': 'local_evidence', 'evidence_count': 0, 'decisions': [], 'actions_taken': False, 'security_verdict': 'NONE'}
     evidence = []
@@ -289,11 +289,6 @@ def policy_evidence():
     for connection in (network.get('connections') or [])[:128]:
         if isinstance(connection, dict):
             evidence.append({'type': 'network_connection_observed', 'severity': 'INFO', 'confidence': 1.0, 'source': 'network_intelligence'})
-    filesystem = filesystem_behavior()
-    events = filesystem.get('events') or {}
-    for event_type in ('created', 'deleted', 'modified'):
-        for _event in (events.get(event_type) or [])[:32]:
-            evidence.append({'type': f'filesystem_{event_type}', 'severity': 'INFO', 'confidence': 1.0, 'source': 'filesystem_behavior'})
     return policy_evaluate(evidence[:256])
 
 
