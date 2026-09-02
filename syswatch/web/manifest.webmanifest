@@ -1,0 +1,10 @@
+{
+  "name": "SYSWATCH PRO",
+  "short_name": "SYSWATCH",
+  "description": "Local-first host security monitoring and intrusion detection.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#070b14",
+  "theme_color": "#070b14",
+  "icons": [{"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
