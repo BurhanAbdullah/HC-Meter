@@ -44,7 +44,7 @@ chmod +x "$BIN"
 cat > "$SIGNAL_BIN" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-exec /usr/bin/python3 /opt/syswatch/syswatch/agents/feed_signal.py "$@"
+exec /opt/syswatch/syswatch/agents/feed_signal.sh "$@"
 EOF
 chmod +x "$SIGNAL_BIN"
 
