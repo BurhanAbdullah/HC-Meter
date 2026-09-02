@@ -12,6 +12,10 @@ try:
     from causal_engine import summary as agent_summary
 except Exception:
     agent_summary = lambda: {'score': 0, 'confidence': 0, 'level': 'UNKNOWN', 'chains': [], 'events': []}
+try:
+    from behavioral_baseline import observe as baseline_observe
+except Exception:
+    baseline_observe = lambda m: {'ready': False, 'samples': 0, 'status': 'UNAVAILABLE'}
 
 HOST = os.environ.get('SYSWATCH_HOST', '127.0.0.1')
 PORT = int(os.environ.get('SYSWATCH_PORT', '8080'))
@@ -198,14 +202,12 @@ def process_lineage(limit=250):
         except OSError:
             exe = status.get('Name', 'unknown')
         uid = status.get('Uid', '0').split()[0]
-        try:
-            user = cmd(['getent', 'passwd', uid], timeout=0.5).split(':', 1)[0] or uid
-        except Exception:
-            user = uid
+        user = cmd(['getent', 'passwd', uid], timeout=0.5).split(':', 1)[0] or uid
         try:
             start_ticks = int(fields[19]) if len(fields) > 19 else 0
             hz = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
-            boot = float(Path('/proc/stat').read_text().split('btime ', 1)[1].splitlines()[0]) if 'btime ' in Path('/proc/stat').read_text() else time.time()
+            stat_text = Path('/proc/stat').read_text(errors='ignore')
+            boot = float(stat_text.split('btime ', 1)[1].splitlines()[0]) if 'btime ' in stat_text else time.time()
             start_time = round(boot + start_ticks / hz, 3)
         except Exception:
             start_time = 0
@@ -293,6 +295,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(metrics())
         if path == '/api/processes':
             return self.send_json({'timestamp': int(time.time()), 'processes': process_lineage()})
+        if path == '/api/baseline':
+            return self.send_json(baseline_observe(metrics()))
         if path == '/api/agent':
             return self.send_json(agent_summary())
         if path == '/api/scan':
