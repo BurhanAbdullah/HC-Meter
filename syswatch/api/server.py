@@ -16,6 +16,10 @@ try:
     from behavioral_baseline import observe as baseline_observe
 except Exception:
     baseline_observe = lambda m: {'ready': False, 'samples': 0, 'status': 'UNAVAILABLE'}
+try:
+    from network_intelligence import collect as network_intelligence
+except Exception:
+    network_intelligence = lambda: {'source': 'unavailable', 'reputation_provider': 'none', 'dns': {'nameservers': []}, 'connections': [], 'summary': {'connections': 0, 'public_unassessed': 0, 'local_or_special': 0}}
 
 HOST = os.environ.get('SYSWATCH_HOST', '127.0.0.1')
 PORT = int(os.environ.get('SYSWATCH_PORT', '8080'))
@@ -293,6 +297,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'ok': True, 'service': 'syswatch', 'agent': 'online'})
         if path == '/api/metrics':
             return self.send_json(metrics())
+        if path == '/api/network-intelligence':
+            return self.send_json(network_intelligence())
         if path == '/api/processes':
             return self.send_json({'timestamp': int(time.time()), 'processes': process_lineage()})
         if path == '/api/baseline':
