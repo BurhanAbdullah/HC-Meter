@@ -20,6 +20,10 @@ try:
     from network_intelligence import collect as network_intelligence
 except Exception:
     network_intelligence = lambda: {'source': 'unavailable', 'reputation_provider': 'none', 'dns': {'nameservers': []}, 'connections': [], 'summary': {'connections': 0, 'public_unassessed': 0, 'local_or_special': 0}}
+try:
+    from filesystem_behavior import collect as filesystem_collect
+except Exception:
+    filesystem_collect = lambda **kwargs: {'status': 'UNAVAILABLE', 'files_observed': 0, 'events': {'created': [], 'deleted': [], 'modified': [], 'created_count': 0, 'deleted_count': 0, 'modified_count': 0}}
 
 HOST = os.environ.get('SYSWATCH_HOST', '127.0.0.1')
 PORT = int(os.environ.get('SYSWATCH_PORT', '8080'))
@@ -222,6 +226,19 @@ def process_lineage(limit=250):
     return result
 
 
+def filesystem_behavior():
+    roots_env = os.environ.get('SYSWATCH_FS_ROOTS', '')
+    roots = tuple(x for x in (v.strip() for v in roots_env.split(',')) if x) or ('/tmp', '/var/tmp')
+    state_dir = Path(os.environ.get('SYSWATCH_STATE_DIR', str(Path.home() / '.local' / 'state' / 'syswatch')))
+    state_path = state_dir / 'filesystem-baseline.json'
+    try:
+        max_files = min(max(int(os.environ.get('SYSWATCH_FS_MAX_FILES', '1000')), 1), 5000)
+        max_depth = min(max(int(os.environ.get('SYSWATCH_FS_MAX_DEPTH', '2')), 0), 8)
+    except ValueError:
+        max_files, max_depth = 1000, 2
+    return filesystem_collect(roots=roots, state_path=state_path, max_files=max_files, max_depth=max_depth)
+
+
 def metrics():
     d = shutil.disk_usage('/')
     interfaces = network_interfaces()
@@ -299,6 +316,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(metrics())
         if path == '/api/network-intelligence':
             return self.send_json(network_intelligence())
+        if path == '/api/filesystem-behavior':
+            return self.send_json(filesystem_behavior())
         if path == '/api/processes':
             return self.send_json({'timestamp': int(time.time()), 'processes': process_lineage()})
         if path == '/api/baseline':
