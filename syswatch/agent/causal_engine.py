@@ -30,8 +30,10 @@ class Engine:
    if set(req)<=present:
     matched=[e for e in recent if e['type'] in req]; conf=min(.99, sum(WEIGHT.get(e['type'],.3) for e in matched)/len(matched)+.2)
     self.chains[name]={'name':name.replace('_',' ').title(),'stage':STAGE[name],'confidence':round(conf,3),'tactic':'MITRE ATT&CK mapped behavioral chain','signals':matched,'last_seen':now}
+  # A chain is active only while its supporting telemetry remains inside the
+  # correlation window. This prevents stale detections surviving indefinitely.
   for name,c in list(self.chains.items()):
-   if c['last_seen']<now-self.window*2: del self.chains[name]
+   if c['last_seen'] < now-self.window: del self.chains[name]
  def summary(self):
   active=list(self.chains.values()); conf=max([c['confidence'] for c in active],default=0); score=min(100,int(conf*100)); level='CRITICAL' if score>=85 else 'HIGH' if score>=65 else 'MEDIUM' if score>=30 else 'LOW'; return {'score':score,'confidence':conf,'level':level,'chains':active,'events':list(self.events)[-100:]}
 engine=Engine()
