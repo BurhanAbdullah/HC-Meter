@@ -80,6 +80,28 @@ SYSWATCH does **not** claim 99.99% detection accuracy. Real endpoint-security ef
 
 Do not expose the dashboard publicly without authentication and an explicit network-security policy.
 
+## Security maturity roadmap
+
+Systematic feature roadmap. Each capability must be implemented with least privilege, explicit data boundaries, deterministic tests, adversarial/regression tests where applicable, and CI verification before being marked complete.
+
+- [x] Live historical graphs (session-local resource history)
+- [x] Firewall intelligence (UFW/firewalld/nftables detection)
+- [x] Wi-Fi security intelligence (interface/SSID/security/signal where OS exposes it)
+- [x] Process lineage (bounded PID/PPID/executable/user/start-time telemetry; command lines excluded by default)
+- [x] Behavioral baseline / host DNA (local descriptive baseline; no autonomous response)
+- [ ] DNS/network reputation intelligence
+- [ ] Filesystem behavioral monitoring
+- [ ] Prediction engine
+- [ ] Policy engine
+- [ ] Safe reversible containment
+- [ ] Tamper resistance
+- [ ] Signed updates / supply chain
+- [ ] Debian/RHEL packages + releases
+- [ ] Cross-platform agents
+- [ ] Independent security evaluation
+
+Security gates for every feature: no fabricated telemetry, no unsafe default actions, local-first data handling, bounded resource use, input validation, regression tests, and CI green. Do not claim production EDR status until the remaining controls and independent evaluation are complete.
+
 ## Development
 
 ```bash
@@ -87,7 +109,7 @@ python3 syswatch/api/server.py
 python3 -m pytest tests/test_causal_engine.py
 ```
 
-The project is being developed toward a production endpoint-security platform: broader telemetry, signed updates, policy management, isolation/containment, tamper resistance, cross-platform agents, installer packages and independent security evaluation are next milestones.
+The project is being developed incrementally; refer to the security maturity roadmap above for current and upcoming capabilities.
 
 ## License
 
