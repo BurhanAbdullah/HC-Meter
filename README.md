@@ -2,7 +2,7 @@
 
 **Local-first host security monitoring and intrusion detection for Linux.**
 
-SYSWATCH PRO turns the existing modular security engine into a usable product: one-command installation, a local web application, continuous background monitoring, live host metrics, network visibility, and on-demand security scans. The core project remains modular and extensible. fileciteturn0file0L63-L70
+SYSWATCH PRO turns the existing modular security engine into a usable product: one-command installation, a local web application, continuous background monitoring, live host metrics, network visibility, and on-demand security scans. The core project remains modular and extensible.
 
 ## What users get
 
@@ -13,7 +13,7 @@ SYSWATCH PRO turns the existing modular security engine into a usable product: o
 - **Installable app** — Debian packages can be built from tagged releases, and the repository includes a one-command installer.
 - **PWA shell** — the dashboard can be installed from a compatible browser and retains its application shell offline.
 
-The underlying engine already covers system monitoring, suspicious-process detection, network analysis, hardening checks, file-integrity monitoring, environment awareness and threat assessment. fileciteturn0file0L87-L100 fileciteturn0file0L109-L148
+The underlying engine covers system monitoring, suspicious-process detection, network analysis, hardening checks, file-integrity monitoring, environment awareness and threat assessment.
 
 ## Install from source
 
