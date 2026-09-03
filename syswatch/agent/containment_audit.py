@@ -3,7 +3,7 @@
 
 The ledger is intentionally local and in-memory. It does not grant privilege,
 perform host mutation, or claim durable storage. Entries are chained with
-SHA-256 digests so accidental/replay modification is detectable when the
+SHA-256 digests so accidental or replay modification is detectable when the
 ledger is exported or verified by a trusted caller.
 """
 
@@ -80,6 +80,9 @@ class ContainmentAuditLedger:
             raise ValueError("actions_taken must be boolean")
         if type(timestamp) is not int or timestamp < 0:
             raise ValueError("timestamp must be a non-negative integer")
+        if len(self._entries) >= self._max_entries:
+            raise RuntimeError("containment audit ledger capacity reached")
+
         sequence = len(self._entries)
         previous_hash = self._entries[-1].entry_hash if self._entries else GENESIS
         payload = {
@@ -93,27 +96,13 @@ class ContainmentAuditLedger:
             "previous_hash": previous_hash,
         }
         entry = AuditEntry(**payload, entry_hash=_digest(payload))
-        if len(self._entries) >= self._max_entries:
-            self._entries.pop(0)
-            # Re-number the bounded view and rebuild the chain deterministically.
-            retained = [e.as_dict() for e in self._entries]
-            self._entries = []
-            for item in retained:
-                self.append(
-                    event=item["event"], plan_id=item["plan_id"], grant_id=item["grant_id"],
-                    status=item["status"], actions_taken=item["actions_taken"], timestamp=item["timestamp"],
-                )
-            entry = AuditEntry(**{
-                **payload,
-                "sequence": len(self._entries),
-                "previous_hash": self._entries[-1].entry_hash if self._entries else GENESIS,
-            }, entry_hash="")
-            entry = AuditEntry(**{**entry.as_dict(), "entry_hash": _digest({k: v for k, v in entry.as_dict().items() if k != "entry_hash"})})
         self._entries.append(entry)
         return entry
 
     def verify(self, entries: Iterable[AuditEntry] | None = None) -> bool:
         chain = tuple(self._entries if entries is None else entries)
+        if len(chain) > self._max_entries:
+            return False
         previous = GENESIS
         for expected_sequence, entry in enumerate(chain):
             if entry.sequence != expected_sequence or entry.previous_hash != previous:
