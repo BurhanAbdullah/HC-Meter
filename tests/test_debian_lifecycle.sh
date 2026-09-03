@@ -3,7 +3,7 @@ set -euo pipefail
 
 DEB="${1:?usage: test_debian_lifecycle.sh PACKAGE.deb}"
 [[ -f "$DEB" ]]
-for command in dpkg dpkg-deb systemctl curl id stat getent; do command -v "$command" >/dev/null; done
+for command in dpkg dpkg-deb systemctl curl id stat getent journalctl; do command -v "$command" >/dev/null; done
 
 version="$(dpkg-deb -f "$DEB" Version)"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
@@ -20,6 +20,26 @@ assert_equal() {
   local expected="$1" actual="$2" label="$3"
   if [[ "$actual" != "$expected" ]]; then
     printf 'lifecycle assertion failed: %s\nexpected: %s\nactual:   %s\n' "$label" "$expected" "$actual" >&2
+    return 1
+  fi
+}
+
+wait_for_health() {
+  local output="$1"
+  local attempts="${2:-30}"
+  local timeout="${3:-1}"
+  local ready=0
+  for _ in $(seq 1 "$attempts"); do
+    if curl -fsS --max-time "$timeout" http://127.0.0.1:8080/api/health >"$output" 2>/dev/null; then
+      ready=1
+      break
+    fi
+    sleep 1
+  done
+  if (( ready != 1 )); then
+    printf 'SYSWATCH health endpoint did not become ready after %s seconds.\n' "$attempts" >&2
+    systemctl status syswatch.service --no-pager >&2 || true
+    journalctl -u syswatch.service -n 80 --no-pager >&2 || true
     return 1
   fi
 }
@@ -41,12 +61,7 @@ grep -q '^AmbientCapabilities=$' /etc/systemd/system/syswatch.service
 grep -q '^ProtectSystem=strict$' /etc/systemd/system/syswatch.service
 grep -q '^StateDirectoryMode=0750$' /etc/systemd/system/syswatch.service
 
-declare -i ready=0
-for _ in {1..30}; do
-  if curl -fsS --max-time 1 http://127.0.0.1:8080/api/health >/tmp/syswatch-health.json 2>/dev/null; then ready=1; break; fi
-  sleep 1
-done
-(( ready == 1 ))
+wait_for_health /tmp/syswatch-health.json
 
 # Upgrade the installed package without removing the persistent state first.
 tmp="$(mktemp -d)"
@@ -59,7 +74,7 @@ chmod 0755 "$tmp/root/DEBIAN/postinst" "$tmp/root/DEBIAN/postrm"
 dpkg-deb --build "$tmp/root" "$tmp/upgrade.deb" >/dev/null
 dpkg -i "$tmp/upgrade.deb"
 systemctl is-active syswatch.service
-curl -fsS --max-time 2 http://127.0.0.1:8080/api/health >/tmp/syswatch-health-upgrade.json
+wait_for_health /tmp/syswatch-health-upgrade.json 30 2
 
 # Purge must remove both packaged integration state and the dedicated account.
 dpkg --purge syswatch
