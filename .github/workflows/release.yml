@@ -6,13 +6,15 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
 
 jobs:
   package:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -29,6 +31,7 @@ jobs:
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           ROOT="pkg/syswatch_${VERSION}_amd64"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")"
           rm -rf pkg
           mkdir -p "$ROOT/DEBIAN" "$ROOT/opt/syswatch" "$ROOT/usr/local/bin"
           git archive --format=tar --prefix=syswatch/ "$GITHUB_SHA" | tar -x -C "$ROOT/opt/syswatch"
@@ -133,10 +136,13 @@ jobs:
           esac
           EOF
           chmod 755 "$ROOT/DEBIAN/postrm"
-          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")" dpkg-deb --build "$ROOT"
+          # Normalize every package file timestamp so the archive does not
+          # depend on the wall-clock time of the release runner.
+          find "$ROOT" -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} +
+          SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" dpkg-deb --build "$ROOT"
           mv "pkg/syswatch_${VERSION}_amd64.deb" .
           sha256sum "syswatch_${VERSION}_amd64.deb" > SHA256SUMS
-          printf 'SYSWATCH %s\nCommit %s\n' "$VERSION" "$GITHUB_SHA" > RELEASE-METADATA.txt
+          printf 'SYSWATCH %s\nCommit %s\nSource-Date-Epoch %s\n' "$VERSION" "$GITHUB_SHA" "$SOURCE_DATE_EPOCH" > RELEASE-METADATA.txt
       - name: Verify Debian package
         shell: bash
         run: |
@@ -151,6 +157,7 @@ jobs:
           grep -q 'User=syswatch' control/postinst
           grep -q 'ProtectSystem=strict' control/postinst
           grep -q 'CapabilityBoundingSet=' control/postinst
+          grep -q 'AmbientCapabilities=' control/postinst
           sha256sum --check SHA256SUMS
       - name: Attest Debian package provenance
         uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
