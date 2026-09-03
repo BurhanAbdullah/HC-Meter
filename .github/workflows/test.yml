@@ -30,7 +30,7 @@ jobs:
       - name: Run unit and adversarial synthetic tests
         run: python -m pytest -q
       - name: Validate shell syntax
-        run: bash -n install.sh syswatch/agents/feed_signal.sh
+        run: bash -n install.sh syswatch/agents/feed_signal.sh packaging/build_deb.sh
       - name: Validate installer lifecycle contract
         run: bash tests/test_installer_contract.sh
       - name: Validate least-privilege service contract
@@ -55,3 +55,16 @@ jobs:
               raise SystemExit(1)
           print('All GitHub Action references are pinned to full commit SHAs.')
           PY
+
+  debian-lifecycle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build deterministic test package
+        run: sudo bash packaging/build_deb.sh 0.0.0 HEAD
+      - name: Verify package lifecycle
+        run: sudo bash tests/test_debian_lifecycle.sh ./syswatch_0.0.0_amd64.deb
