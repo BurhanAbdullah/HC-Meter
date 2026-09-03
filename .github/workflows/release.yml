@@ -73,6 +73,12 @@ jobs:
           esac
           CMD
           chmod 0755 /usr/local/bin/syswatch
+          cat > /usr/local/bin/syswatch-signal <<'SIGNAL'
+          #!/bin/sh
+          set -e
+          exec /opt/syswatch/syswatch/agents/feed_signal.sh "$@"
+          SIGNAL
+          chmod 0755 /usr/local/bin/syswatch-signal
           systemctl daemon-reload
           systemctl enable syswatch.service
           systemctl restart syswatch.service || systemctl start syswatch.service
