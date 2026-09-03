@@ -17,6 +17,7 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 MAX_PAYLOAD_BYTES = 64 * 1024
+MAX_PAYLOAD_DEPTH = 32
 MIN_KEY_BYTES = 32
 
 
@@ -35,9 +36,23 @@ def _validate_key(key: bytes) -> None:
         raise ValueError("integrity key must contain at least 32 bytes")
 
 
+def _validate_payload_depth(payload: dict[str, Any]) -> None:
+    """Reject pathological nesting before JSON encoding can exhaust the stack."""
+    pending: list[tuple[Any, int]] = [(payload, 1)]
+    while pending:
+        value, depth = pending.pop()
+        if depth > MAX_PAYLOAD_DEPTH:
+            raise ValueError("state payload exceeds maximum nesting depth")
+        if isinstance(value, dict):
+            pending.extend((child, depth + 1) for child in value.values())
+        elif isinstance(value, list):
+            pending.extend((child, depth + 1) for child in value)
+
+
 def _canonical_payload(payload: dict[str, Any]) -> bytes:
     if not isinstance(payload, dict):
         raise ValueError("state payload must be an object")
+    _validate_payload_depth(payload)
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     if len(encoded) > MAX_PAYLOAD_BYTES:
         raise ValueError("state payload exceeds bounded size")
