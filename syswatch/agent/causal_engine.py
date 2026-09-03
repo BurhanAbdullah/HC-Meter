@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json,time
+import json, os, time
 from pathlib import Path
 from collections import deque
 
@@ -14,9 +14,11 @@ RULES={
 }
 STAGE={'reverse_shell':'Command & Control','persistence':'Persistence','privilege_escalation':'Privilege Escalation','credential_access':'Credential Access','ransomware':'Impact','cryptominer':'Execution','bruteforce':'Initial Access'}
 WEIGHT={'new_port':.30,'reverse_shell':.90,'file_write_tmp':.40,'cron_change':.60,'new_suid':.80,'honeypot_access':.99,'outbound_c2':.70,'mass_file_write':.85,'high_cpu_alien':.50,'ssh_failure':.30}
+
 class Engine:
  def __init__(self,state=None,window=120):
-  self.window=window; self.state=Path(state or Path(__file__).resolve().parents[2]/'runtime/agent_state.json'); self.state.parent.mkdir(parents=True,exist_ok=True); self.events=deque(maxlen=500); self.chains={}; self.load(); self.evaluate()
+  default_state = Path(os.environ.get('SYSWATCH_STATE_DIR', Path(__file__).resolve().parents[2]/'runtime')) / 'agent_state.json'
+  self.window=window; self.state=Path(state or default_state); self.state.parent.mkdir(parents=True,exist_ok=True); self.events=deque(maxlen=500); self.chains={}; self.load(); self.evaluate()
  def load(self):
   try:
    d=json.loads(self.state.read_text()); self.events.extend(d.get('events',[])); self.chains=d.get('chains',{})

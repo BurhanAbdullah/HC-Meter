@@ -33,6 +33,8 @@ jobs:
         run: bash -n install.sh syswatch/agents/feed_signal.sh
       - name: Validate installer lifecycle contract
         run: bash tests/test_installer_contract.sh
+      - name: Validate least-privilege service contract
+        run: bash tests/test_service_security_contract.sh
       - name: Enforce immutable workflow action references
         shell: bash
         run: |

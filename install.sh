@@ -3,6 +3,9 @@ set -Eeuo pipefail
 
 APP_NAME="syswatch"
 PREFIX="/opt/syswatch"
+STATE_DIR="/var/lib/syswatch"
+SERVICE_USER="syswatch"
+SERVICE_GROUP="syswatch"
 BIN="/usr/local/bin/syswatch"
 SIGNAL_BIN="/usr/local/bin/syswatch-signal"
 SERVICE="/etc/systemd/system/syswatch.service"
@@ -17,6 +20,8 @@ fi
 command -v git >/dev/null || { echo "git is required"; exit 1; }
 command -v python3 >/dev/null || { echo "python3 is required"; exit 1; }
 command -v systemctl >/dev/null || { echo "systemd/systemctl is required"; exit 1; }
+command -v useradd >/dev/null || { echo "useradd is required"; exit 1; }
+command -v getent >/dev/null || { echo "getent is required"; exit 1; }
 
 git check-ref-format --allow-onelevel "$REF" >/dev/null 2>&1 || {
   echo "Invalid SYSWATCH_REF: $REF" >&2
@@ -51,6 +56,15 @@ on_error() {
 }
 trap on_error ERR
 
+# The daemon never needs a login shell or administrative identity.
+if ! getent group "$SERVICE_GROUP" >/dev/null; then
+  groupadd --system "$SERVICE_GROUP"
+fi
+if ! getent passwd "$SERVICE_USER" >/dev/null; then
+  useradd --system --gid "$SERVICE_GROUP" --home-dir "$STATE_DIR" --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
+fi
+install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STATE_DIR"
+
 CLONE="$TMP/syswatch"
 git clone --depth 1 --branch "$REF" "$REPO" "$CLONE" >/dev/null 2>&1
 git -C "$CLONE" rev-parse --verify HEAD >/dev/null
@@ -60,11 +74,11 @@ STAGED="$TMP/installed"
 mkdir -p "$STAGED"
 cp -a "$CLONE/." "$STAGED/"
 
-# Preserve existing runtime state during an upgrade. The application itself
-# remains responsible for validating security-sensitive state before use.
+# Preserve the legacy in-tree runtime on first upgrade into the dedicated
+# service state directory. Existing protected state is never regenerated here.
 if [[ -d "$PREFIX/runtime" ]]; then
-  mkdir -p "$STAGED/runtime"
-  cp -a "$PREFIX/runtime/." "$STAGED/runtime/"
+  cp -a "$PREFIX/runtime/." "$STATE_DIR/"
+  chown -R "$SERVICE_USER:$SERVICE_GROUP" "$STATE_DIR"
 fi
 
 # Stop the active service only after a complete staged tree exists.
@@ -96,6 +110,7 @@ chmod 0755 "$BIN"
 cat > "$SIGNAL_BIN" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+export SYSWATCH_STATE_DIR="${SYSWATCH_STATE_DIR:-/var/lib/syswatch}"
 exec /opt/syswatch/syswatch/agents/feed_signal.sh "$@"
 EOF
 chmod 0755 "$SIGNAL_BIN"
@@ -107,17 +122,35 @@ After=network.target
 
 [Service]
 Type=simple
+User=$SERVICE_USER
+Group=$SERVICE_GROUP
 WorkingDirectory=$PREFIX
+Environment=SYSWATCH_STATE_DIR=$STATE_DIR
 ExecStart=/usr/bin/python3 $PREFIX/syswatch/api/server.py
 Restart=on-failure
 RestartSec=3
+UMask=0077
 NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
 ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=$STATE_DIR
+StateDirectory=syswatch
 
 [Install]
 WantedBy=multi-user.target
 EOF
 chmod 0644 "$SERVICE"
+chown -R root:root "$PREFIX"
 
 cat > "$PREFIX/uninstall.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -125,7 +158,9 @@ set -euo pipefail
 if [[ "$(id -u)" -ne 0 ]]; then echo "Run with sudo"; exit 1; fi
 systemctl disable --now syswatch.service 2>/dev/null || true
 rm -f /etc/systemd/system/syswatch.service /usr/local/bin/syswatch /usr/local/bin/syswatch-signal
-rm -rf /opt/syswatch
+rm -rf /opt/syswatch /var/lib/syswatch
+if getent passwd syswatch >/dev/null; then userdel syswatch 2>/dev/null || true; fi
+if getent group syswatch >/dev/null; then groupdel syswatch 2>/dev/null || true; fi
 systemctl daemon-reload
 echo "SYSWATCH removed."
 EOF
