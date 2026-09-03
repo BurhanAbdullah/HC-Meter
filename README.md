@@ -91,6 +91,7 @@ The current dashboard is built as a local browser application and refreshes host
 - Live session graphs
 - Load trend
 - Process count
+- Bounded local resource prediction
 
 ### Security posture
 
@@ -101,6 +102,7 @@ Where supported by the host, SYSWATCH surfaces:
 - SSH configuration posture
 - Active causal chains
 - Security-event history
+- Policy evidence derived from existing normalized security/network signals
 
 The dashboard distinguishes unavailable telemetry from healthy telemetry rather than silently inventing a value.
 
@@ -112,10 +114,11 @@ The dashboard distinguishes unavailable telemetry from healthy telemetry rather 
 - Wi-Fi security information when available
 - Listening TCP/UDP endpoints
 - Local network state
+- DNS/network intelligence where supported
 
 ### Security timeline
 
-The event stream provides a continuously updated view of normalized security events and their severity, while the causal engine groups related events into chains.
+The event stream provides a continuously updated view of normalized security events and their severity, while the causal engine groups related events into chains. The policy-evidence layer is read-only and does not execute containment or other host-mutating actions.
 
 ---
 
@@ -168,6 +171,7 @@ flowchart LR
     D --> E[Threat / causal intelligence]
     E --> F[Local SOC dashboard]
     D --> G[Persistent local state]
+    E --> H[Bounded policy evidence]
 ```
 
 ### Telemetry pipeline
@@ -206,6 +210,14 @@ Causal correlation
    ├── multi-signal chains
    ├── confidence scoring
    └── persistent event state
+   │
+   ▼
+Evidence / policy layer
+   │
+   ├── bounded local evaluation
+   ├── normalized confidence
+   ├── read-only API
+   └── no autonomous response
    │
    ▼
 Local SOC
@@ -281,11 +293,13 @@ The recommended workflow is:
       ↓
 5. Watch live resource / network telemetry
       ↓
-6. Run an explicit security scan if required
+6. Review bounded predictions when sufficient history exists
       ↓
-7. Feed or collect security signals
+7. Inspect policy evidence
       ↓
-8. Inspect causal chains and event evidence
+8. Feed or collect security signals
+      ↓
+9. Inspect causal chains and event evidence
 ```
 
 No destructive response is triggered simply because an alert appears.
@@ -294,7 +308,7 @@ No destructive response is triggered simply because an alert appears.
 
 ## Live graphs
 
-SYSWATCH now treats visualization as part of the security interface rather than decoration.
+SYSWATCH treats visualization as part of the security interface rather than decoration.
 
 The dashboard maintains session history for:
 
@@ -303,18 +317,9 @@ The dashboard maintains session history for:
 - Disk utilization
 - System load
 
-The next visualization layer is designed to extend this to:
+The visualization layer also exposes bounded prediction output when sufficient local history is available. Predictions are informational and do not constitute a security verdict or autonomous action.
 
-- network RX/TX rate
-- process-count trend
-- threat-score history
-- security-event rate
-- firewall blocks
-- DNS activity
-- anomaly score
-- behavioral-baseline deviation
-
-These should be populated from real host telemetry, not placeholder values.
+Future analytics should be populated from real host telemetry, not placeholder values.
 
 ---
 
@@ -369,7 +374,10 @@ The repository contains safe synthetic tests covering:
 - noisy benign telemetry;
 - correlation-window expiry;
 - state persistence after restart;
-- multi-stage attacks producing multiple simultaneous chains.
+- multi-stage attacks producing multiple simultaneous chains;
+- bounded prediction input and history limits;
+- policy evidence confidence handling;
+- read-only policy API boundaries.
 
 No exploit or destructive payload is executed by these tests.
 
@@ -385,6 +393,7 @@ SYSWATCH is deliberately conservative about its claims.
 - Current causal detection is deterministic and based on normalized signals within a temporal window.
 - Slow-and-low activity separated beyond the current correlation window is a known detection gap.
 - Automated destructive response is not enabled by default.
+- The current policy-evidence API is read-only and does not perform containment, command execution, or host mutation.
 - Future containment should be policy-driven, least-privilege, auditable and reversible where practical.
 - The dashboard binds to localhost by default.
 - Do not expose the dashboard publicly without authentication and an explicit network-security design.
@@ -394,7 +403,7 @@ SYSWATCH is deliberately conservative about its claims.
 ## Product roadmap
 
 ```text
-CURRENT
+CURRENT — implemented and validated in the repository
   ✓ Local SOC dashboard
   ✓ Host telemetry
   ✓ Network endpoints
@@ -403,25 +412,30 @@ CURRENT
   ✓ Persistent local state
   ✓ Linux service integration
   ✓ Synthetic adversarial validation
+  ✓ Behavioral baseline / host DNA
+  ✓ Process parent-child lineage
+  ✓ DNS / network intelligence
+  ✓ Filesystem behavioral monitoring
+  ✓ Bounded local prediction engine
+  ✓ Prediction dashboard integration
+  ✓ Bounded evidence policy engine
+  ✓ Read-only policy evidence API
 
-NEXT
-  □ Behavioral baseline / host DNA
-  □ Process parent-child lineage
-  □ Network + DNS intelligence
-  □ Filesystem behavioral monitoring
-  □ Threat-score history
-  □ Security-event analytics
-  □ Policy engine
-
-PRODUCTIZATION
-  □ Reversible containment
+NEXT — dependency-ordered engineering work
+  □ Safe reversible containment
   □ Sensor health / tamper resistance
-  □ Signed updates
+  □ Signed updates / supply-chain hardening
   □ Debian / Ubuntu / RHEL-family packages
-  □ Release artifacts
+  □ Reproducible release artifacts and release process
   □ Cross-platform agents
-  □ Independent red-team evaluation
-  □ False-positive benchmarking
+  □ Independent security evaluation
+  □ False-positive / detection benchmarking
+
+SECURITY GATE
+  Every feature must preserve least privilege, secure defaults, local-first data boundaries,
+  bounded resource use, input validation, deterministic regression/adversarial tests, and
+  green CI before promotion. SYSWATCH must not claim production EDR status until the
+  remaining controls and independent evaluation are complete.
 ```
 
 ---
