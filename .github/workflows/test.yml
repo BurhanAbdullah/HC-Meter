@@ -18,9 +18,11 @@ jobs:
         python-version: ['3.10', '3.11', '3.12', '3.13']
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install test dependency
@@ -29,3 +31,11 @@ jobs:
         run: python -m pytest -q
       - name: Validate shell syntax
         run: bash -n install.sh syswatch/agents/feed_signal.sh
+      - name: Enforce immutable workflow action references
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE '^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*[^@[:space:]]+@[^[:space:]#]+' .github/workflows; then
+            echo 'Unpinned GitHub Action reference detected; use a full 40-character commit SHA.' >&2
+            exit 1
+          fi
