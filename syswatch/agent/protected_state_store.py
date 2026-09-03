@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed local persistence for protected SYSWATCH state.
-
-The store keeps the integrity key and state in separate 0600 files, creates
-missing files without following symlinks, and writes state atomically with an
-fsync before replacement. It is intended for local unprivileged state and is
-not a substitute for a kernel-backed keyring, TPM, remote append-only log, or
-an independent trust anchor.
-"""
+"""Fail-closed local persistence for protected SYSWATCH state."""
 
 from __future__ import annotations
 
@@ -64,6 +57,20 @@ class ProtectedStateStore:
             raise ValueError("protected state key has invalid length")
         return key
 
+    def _read_key_without_creation(self) -> bytes:
+        if not self.directory.exists() or self.directory.is_symlink():
+            raise ValueError("protected state directory is unavailable")
+        if self.key_path.is_symlink():
+            raise ValueError("protected state key must not be a symlink")
+        fd = os.open(self.key_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            key = os.read(fd, KEY_BYTES + 1)
+        finally:
+            os.close(fd)
+        if len(key) != KEY_BYTES:
+            raise ValueError("protected state key has invalid length")
+        return key
+
     def save(self, payload: dict[str, Any]) -> ProtectedState:
         """Seal and atomically persist state; fail closed on filesystem errors."""
         key = self._load_or_create_key()
@@ -103,3 +110,23 @@ class ProtectedStateStore:
         raw = self.state_path.read_bytes()
         candidate = json.loads(raw.decode("utf-8"))
         return verify_state(candidate, key=key)
+
+    def check(self) -> dict[str, Any]:
+        """Return read-only integrity health without creating or changing state."""
+        if not self.directory.exists():
+            return {"state": "ABSENT", "integrity": "NOT_CHECKED", "recoverable": True}
+        if self.directory.is_symlink():
+            return {"state": "INVALID", "integrity": "FAIL", "recoverable": False}
+        if not self.key_path.exists() or not self.state_path.exists():
+            return {"state": "INCOMPLETE", "integrity": "FAIL", "recoverable": False}
+        try:
+            key = self._read_key_without_creation()
+            if self.state_path.is_symlink():
+                raise ValueError("protected state path must not be a symlink")
+            if self.state_path.stat().st_size > MAX_STATE_FILE_BYTES:
+                raise ValueError("protected state file exceeds bounded size")
+            candidate = json.loads(self.state_path.read_bytes().decode("utf-8"))
+            verify_state(candidate, key=key)
+            return {"state": "PRESENT", "integrity": "PASS", "recoverable": True}
+        except (OSError, ValueError, TypeError, UnicodeError, json.JSONDecodeError):
+            return {"state": "CORRUPT", "integrity": "FAIL", "recoverable": False}
