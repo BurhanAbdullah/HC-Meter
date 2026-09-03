@@ -1,0 +1,4 @@
+# Development and CI-only dependencies; none are shipped by SYSWATCH.
+pytest==9.1.1
+flake8==7.3.0
+pip-audit==2.10.1
