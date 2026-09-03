@@ -62,6 +62,7 @@ CapabilityBoundingSet=
 AmbientCapabilities=
 ReadWritePaths=/var/lib/syswatch
 StateDirectory=syswatch
+StateDirectoryMode=0750
 [Install]
 WantedBy=multi-user.target
 SERVICE
