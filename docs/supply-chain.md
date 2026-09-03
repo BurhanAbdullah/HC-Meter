@@ -12,12 +12,22 @@ SYSWATCH treats its CI and release path as part of the security boundary.
 - Release packages are built from the exact tagged Git commit using `git archive`, not from a mutable working tree.
 - Debian release artifacts receive SHA-256 checksums and release metadata containing the version and source commit.
 - Release packaging verifies the generated Debian package and checksum before publication.
-- Release workflow permissions are limited to repository contents and are not granted broad repository administration privileges.
+- Debian release artifacts are also submitted to GitHub's Sigstore-backed build-provenance service, providing verifiable provenance for the package artifact when the release workflow runs with the required GitHub identity/attestation permissions.
+- Release workflow permissions are limited to repository contents plus the narrowly required OIDC and attestation permissions for provenance publication.
+
+## Verification contract
+
+For a published release, consumers should verify both:
+
+1. the SHA-256 checksum in `SHA256SUMS`; and
+2. the GitHub artifact attestation for the Debian package using GitHub's supported attestation verification tooling.
+
+The release metadata identifies the source commit used for the package build. The provenance attestation binds the published package digest to the GitHub Actions build identity and workflow invocation.
 
 ## Security boundary and limitations
 
 The dependency SBOM describes the CI/development Python environment. It is not a claim that the host operating system, kernel, systemd, or native utilities are vulnerability-free. SYSWATCH has no third-party Python runtime dependencies at present.
 
-SHA-256 release checksums provide artifact-integrity verification after download. They are not a substitute for an independently trusted signing key or Sigstore verification. Cryptographic artifact signing/provenance remains a release-hardening item until it is implemented and validated.
+SHA-256 release checksums provide artifact-integrity verification after download. Sigstore-backed provenance provides an additional build-origin/integrity signal, but it is not a substitute for an independent security review, a distribution trust chain, or operator verification of the expected repository and release policy.
 
 The project does not claim that GitHub-hosted CI is an independent security review. An external security assessment remains a separate release gate.
