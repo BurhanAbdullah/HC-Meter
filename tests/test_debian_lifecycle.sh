@@ -16,19 +16,30 @@ cleanup() {
 }
 trap cleanup EXIT
 
+assert_equal() {
+  local expected="$1" actual="$2" label="$3"
+  if [[ "$actual" != "$expected" ]]; then
+    printf 'lifecycle assertion failed: %s\nexpected: %s\nactual:   %s\n' "$label" "$expected" "$actual" >&2
+    return 1
+  fi
+}
+
 dpkg -i "$DEB"
 systemctl is-enabled syswatch.service
 systemctl is-active syswatch.service
 id syswatch
 
-test "$(stat -c '%U:%G:%a' /var/lib/syswatch)" = 'syswatch:syswatch:750'
-test "$(stat -c '%U:%G' /opt/syswatch)" = 'root:root'
+state_meta="$(stat -c '%U:%G:%a' /var/lib/syswatch)"
+opt_meta="$(stat -c '%U:%G' /opt/syswatch)"
+assert_equal 'syswatch:syswatch:750' "$state_meta" '/var/lib/syswatch ownership/mode'
+assert_equal 'root:root' "$opt_meta" '/opt/syswatch ownership'
 grep -q '^User=syswatch$' /etc/systemd/system/syswatch.service
 grep -q '^Group=syswatch$' /etc/systemd/system/syswatch.service
 grep -q '^NoNewPrivileges=true$' /etc/systemd/system/syswatch.service
 grep -q '^CapabilityBoundingSet=$' /etc/systemd/system/syswatch.service
 grep -q '^AmbientCapabilities=$' /etc/systemd/system/syswatch.service
 grep -q '^ProtectSystem=strict$' /etc/systemd/system/syswatch.service
+grep -q '^StateDirectoryMode=0750$' /etc/systemd/system/syswatch.service
 
 declare -i ready=0
 for _ in {1..30}; do
@@ -50,6 +61,7 @@ dpkg -i "$tmp/upgrade.deb"
 systemctl is-active syswatch.service
 curl -fsS --max-time 2 http://127.0.0.1:8080/api/health >/tmp/syswatch-health-upgrade.json
 
+# Purge must remove both packaged integration state and the dedicated account.
 dpkg --purge syswatch
 ! getent passwd syswatch >/dev/null
 ! getent group syswatch >/dev/null
