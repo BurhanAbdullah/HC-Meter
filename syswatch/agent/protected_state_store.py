@@ -48,22 +48,27 @@ class ProtectedStateStore:
             return self._read_existing_key()
         except FileNotFoundError:
             key = secrets.token_bytes(KEY_BYTES)
-            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+            fd, temp_name = tempfile.mkstemp(prefix=".key-", dir=self.directory, text=False)
+            temp_path = Path(temp_name)
             try:
-                fd = os.open(self.key_path, flags, 0o600)
-            except FileExistsError:
-                # Another concurrent initializer won the create race. Never
-                # replace its key; reopen and validate the winner's key.
-                return self._read_existing_key()
-            try:
-                written = 0
-                while written < len(key):
-                    written += os.write(fd, key[written:])
-                os.fsync(fd)
+                os.fchmod(fd, 0o600)
+                with os.fdopen(fd, "wb") as stream:
+                    stream.write(key)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                try:
+                    # Publish only after the complete key is durable. Hard-link
+                    # creation is non-replacing, so concurrent initializers can
+                    # never overwrite the winner's key.
+                    os.link(temp_path, self.key_path, follow_symlinks=False)
+                except FileExistsError:
+                    return self._read_existing_key()
+                return key
             finally:
-                os.close(fd)
-            os.chmod(self.key_path, 0o600)
-            return key
+                try:
+                    temp_path.unlink()
+                except FileNotFoundError:
+                    pass
 
     def _read_key_without_creation(self) -> bytes:
         if not self.directory.exists() or self.directory.is_symlink():
