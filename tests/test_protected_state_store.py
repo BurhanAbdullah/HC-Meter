@@ -1,6 +1,7 @@
 import json
 import os
 import stat
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import sys
 
@@ -72,3 +73,21 @@ def test_directory_symlink_is_rejected(tmp_path):
 
     with pytest.raises(ValueError, match="directory"):
         store.save({"counter": 7})
+
+
+def test_concurrent_first_writes_share_one_key(tmp_path):
+    """Concurrent initializers must converge on one durable key."""
+    directory = tmp_path / "state"
+    workers = 16
+
+    def write_from_worker(index: int) -> bytes:
+        store = ProtectedStateStore(directory)
+        store.save({"worker": index})
+        return store.key_path.read_bytes()
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        keys = list(executor.map(write_from_worker, range(workers)))
+
+    assert len(set(keys)) == 1
+    assert len(keys[0]) == 32
+    assert ProtectedStateStore(directory).load()["worker"] in range(workers)
