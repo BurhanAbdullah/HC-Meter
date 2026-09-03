@@ -45,7 +45,6 @@ jobs:
           cat > "$ROOT/DEBIAN/postinst" <<'EOF'
           #!/bin/sh
           set -e
-          chmod +x /opt/syswatch/install.sh /opt/syswatch/syswatch/cmd/syswatch 2>/dev/null || true
           cat > /etc/systemd/system/syswatch.service <<SERVICE
           [Unit]
           Description=SYSWATCH Pro Host Security Monitor
@@ -73,12 +72,30 @@ jobs:
             *) echo "Usage: syswatch {start|stop|restart|status|logs|open}"; exit 2 ;;
           esac
           CMD
-          chmod +x /usr/local/bin/syswatch
+          chmod 0755 /usr/local/bin/syswatch
+          cat > /usr/local/bin/syswatch-signal <<'SIGNAL'
+          #!/bin/sh
+          set -e
+          exec /opt/syswatch/syswatch/agents/feed_signal.sh "$@"
+          SIGNAL
+          chmod 0755 /usr/local/bin/syswatch-signal
           systemctl daemon-reload
           systemctl enable syswatch.service
           systemctl restart syswatch.service || systemctl start syswatch.service
           EOF
           chmod 755 "$ROOT/DEBIAN/postinst"
+          cat > "$ROOT/DEBIAN/postrm" <<'EOF'
+          #!/bin/sh
+          set -e
+          case "${1:-}" in
+            remove|purge)
+              systemctl disable --now syswatch.service 2>/dev/null || true
+              rm -f /etc/systemd/system/syswatch.service /usr/local/bin/syswatch /usr/local/bin/syswatch-signal
+              systemctl daemon-reload 2>/dev/null || true
+              ;;
+          esac
+          EOF
+          chmod 755 "$ROOT/DEBIAN/postrm"
           SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")" dpkg-deb --build "$ROOT"
           mv "pkg/syswatch_${VERSION}_amd64.deb" .
           sha256sum "syswatch_${VERSION}_amd64.deb" > SHA256SUMS
@@ -89,6 +106,10 @@ jobs:
           set -euo pipefail
           dpkg-deb --info syswatch_*.deb
           dpkg-deb --contents syswatch_*.deb >/dev/null
+          dpkg-deb --control syswatch_*.deb control
+          grep -q '^Package: syswatch$' control/control
+          grep -q '^Version:' control/control
+          test -f control/postrm
           sha256sum --check SHA256SUMS
       - name: Create release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
