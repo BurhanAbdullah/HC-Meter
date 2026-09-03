@@ -56,6 +56,8 @@ jobs:
           from pathlib import Path
           import sys
           allowed = set(sys.stdlib_module_names)
+          local_modules = {p.stem for p in Path('syswatch').rglob('*.py')}
+          local_modules.update({'syswatch'})
           external = []
           for path in Path('syswatch').rglob('*.py'):
               tree = ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
@@ -67,11 +69,11 @@ jobs:
                   else:
                       continue
                   for name in names:
-                      if name not in allowed:
+                      if name not in allowed and name not in local_modules:
                           external.append(f'{path}: {name}')
           if external:
               print('Unexpected non-stdlib application imports:')
               print('\n'.join(sorted(set(external))))
               raise SystemExit(1)
-          print('Application runtime imports are stdlib-only; dev tooling is not shipped.')
+          print('Application runtime imports are stdlib-only; internal modules are allowed; dev tooling is not shipped.')
           PY
