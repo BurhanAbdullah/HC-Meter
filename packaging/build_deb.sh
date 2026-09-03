@@ -9,11 +9,8 @@ SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$SOURCE_REF")"
 ROOT="$(mktemp -d "${TMPDIR:-/tmp}/syswatch-deb.XXXXXX")"
 trap 'rm -rf "$ROOT"' EXIT
 mkdir -p "$ROOT/DEBIAN" "$ROOT/opt/syswatch" "$ROOT/usr/local/bin"
-git archive --format=tar --prefix=syswatch/ "$SOURCE_REF" | tar -x -C "$ROOT/opt/syswatch"
-mv "$ROOT/opt/syswatch/syswatch"/* "$ROOT/opt/syswatch/"
-rmdir "$ROOT/opt/syswatch/syswatch"
+git archive --format=tar --prefix=syswatch/ "$SOURCE_REF" | tar -x -C "$ROOT/opt/syswatch" --strip-components=1
 
-# Normalize all packaged file mtimes so rebuilding the same source is byte-identical.
 find "$ROOT/opt/syswatch" -print0 | xargs -0 touch --date="@$SOURCE_DATE_EPOCH"
 
 cat > "$ROOT/DEBIAN/control" <<EOF
@@ -30,9 +27,7 @@ EOF
 cat > "$ROOT/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
 set -e
-if ! getent group syswatch >/dev/null; then
-  groupadd --system syswatch
-fi
+if ! getent group syswatch >/dev/null; then groupadd --system syswatch; fi
 if ! getent passwd syswatch >/dev/null; then
   useradd --system --gid syswatch --home-dir /var/lib/syswatch --no-create-home --shell /usr/sbin/nologin syswatch
 fi
@@ -118,5 +113,5 @@ chmod 755 "$ROOT/DEBIAN/postrm"
 
 OUTPUT="syswatch_${VERSION}_amd64.deb"
 SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" dpkg-deb --build --root-owner-group "$ROOT" "$OUTPUT" >/dev/null
-printf 'SYSWATCH %s\nCommit %s\nSource-Date-Epoch %s\n' "$VERSION" "$(git rev-parse "$SOURCE_REF")" "$SOURCE_DATE_EPOCH" > RELEASE-METADATA.txt
+printf 'SYSWATCH %s\nCommit %s\nSource-Date-Epoch %s\n' "$VERSION" "$(git rev-parse "$SOURCE_REF")" > RELEASE-METADATA.txt
 sha256sum "$OUTPUT" > SHA256SUMS
