@@ -32,14 +32,29 @@ class ProtectedStateStore:
             raise ValueError("protected state directory must not be a symlink")
         os.chmod(self.directory, 0o700)
 
+    def _read_existing_key(self) -> bytes:
+        fd = os.open(self.key_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            key = os.read(fd, KEY_BYTES + 1)
+        finally:
+            os.close(fd)
+        if len(key) != KEY_BYTES:
+            raise ValueError("protected state key has invalid length")
+        return key
+
     def _load_or_create_key(self) -> bytes:
         self._ensure_directory()
         try:
-            fd = os.open(self.key_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            return self._read_existing_key()
         except FileNotFoundError:
             key = secrets.token_bytes(KEY_BYTES)
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-            fd = os.open(self.key_path, flags, 0o600)
+            try:
+                fd = os.open(self.key_path, flags, 0o600)
+            except FileExistsError:
+                # Another concurrent initializer won the create race. Never
+                # replace its key; reopen and validate the winner's key.
+                return self._read_existing_key()
             try:
                 written = 0
                 while written < len(key):
@@ -49,27 +64,13 @@ class ProtectedStateStore:
                 os.close(fd)
             os.chmod(self.key_path, 0o600)
             return key
-        try:
-            key = os.read(fd, KEY_BYTES + 1)
-        finally:
-            os.close(fd)
-        if len(key) != KEY_BYTES:
-            raise ValueError("protected state key has invalid length")
-        return key
 
     def _read_key_without_creation(self) -> bytes:
         if not self.directory.exists() or self.directory.is_symlink():
             raise ValueError("protected state directory is unavailable")
         if self.key_path.is_symlink():
             raise ValueError("protected state key must not be a symlink")
-        fd = os.open(self.key_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-        try:
-            key = os.read(fd, KEY_BYTES + 1)
-        finally:
-            os.close(fd)
-        if len(key) != KEY_BYTES:
-            raise ValueError("protected state key has invalid length")
-        return key
+        return self._read_existing_key()
 
     def save(self, payload: dict[str, Any]) -> ProtectedState:
         """Seal and atomically persist state; fail closed on filesystem errors."""
