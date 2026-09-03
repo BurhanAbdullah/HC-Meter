@@ -28,6 +28,10 @@ try:
     from prediction_engine import predict as prediction_predict
 except Exception:
     prediction_predict = lambda: {'status': 'UNAVAILABLE', 'source': 'local_behavior_baseline', 'samples': 0, 'horizon_steps': 0, 'forecasts': {}, 'actions_taken': False, 'security_verdict': 'NONE'}
+try:
+    from policy_engine import evaluate as policy_evaluate
+except Exception:
+    policy_evaluate = None
 
 HOST = os.environ.get('SYSWATCH_HOST', '127.0.0.1')
 PORT = int(os.environ.get('SYSWATCH_PORT', '8080'))
@@ -266,6 +270,36 @@ def metrics():
     }
 
 
+def policy_evidence():
+    """Evaluate bounded local evidence without triggering stateful collectors."""
+    if policy_evaluate is None:
+        return {'status': 'UNAVAILABLE', 'source': 'local_evidence', 'evidence_count': 0, 'decisions': [], 'actions_taken': False, 'security_verdict': 'NONE'}
+    evidence = []
+    summary = agent_summary()
+    try:
+        from causal_engine import WEIGHT as causal_signal_weights
+    except Exception:
+        causal_signal_weights = {}
+    for event in (summary.get('events') or [])[-256:]:
+        if not isinstance(event, dict):
+            continue
+        signal_type = event.get('type')
+        confidence = event.get('confidence')
+        if not isinstance(confidence, (int, float)):
+            confidence = causal_signal_weights.get(signal_type, 0.3)
+        evidence.append({
+            'type': signal_type,
+            'severity': event.get('severity', 'INFO'),
+            'confidence': max(0.0, min(1.0, float(confidence))),
+            'source': 'causal_engine',
+        })
+    network = network_intelligence()
+    for connection in (network.get('connections') or [])[:128]:
+        if isinstance(connection, dict):
+            evidence.append({'type': 'network_connection_observed', 'severity': 'INFO', 'confidence': 1.0, 'source': 'network_intelligence'})
+    return policy_evaluate(evidence[:256])
+
+
 def run_scan():
     engine = ROOT / 'core' / 'engine.sh'
     if not engine.exists():
@@ -324,6 +358,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(filesystem_behavior())
         if path == '/api/prediction':
             return self.send_json(prediction_predict())
+        if path == '/api/policy-evidence':
+            return self.send_json(policy_evidence())
         if path == '/api/processes':
             return self.send_json({'timestamp': int(time.time()), 'processes': process_lineage()})
         if path == '/api/baseline':
