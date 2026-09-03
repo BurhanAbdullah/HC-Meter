@@ -31,6 +31,8 @@ jobs:
         run: python -m pytest -q
       - name: Validate shell syntax
         run: bash -n install.sh syswatch/agents/feed_signal.sh
+      - name: Validate installer lifecycle contract
+        run: bash tests/test_installer_contract.sh
       - name: Enforce immutable workflow action references
         shell: bash
         run: |
