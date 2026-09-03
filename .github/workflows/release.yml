@@ -21,16 +21,17 @@ jobs:
         run: |
           set -euo pipefail
           [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          git diff --quiet "${GITHUB_SHA}"^ "${GITHUB_SHA}" -- . ':!site' || true
       - name: Build Debian package
         shell: bash
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           ROOT="pkg/syswatch_${VERSION}_amd64"
+          rm -rf pkg
           mkdir -p "$ROOT/DEBIAN" "$ROOT/opt/syswatch" "$ROOT/usr/local/bin"
-          cp -a . "$ROOT/opt/syswatch/"
-          rm -rf "$ROOT/opt/syswatch/.git" "$ROOT/opt/syswatch/pkg"
+          git archive --format=tar --prefix=syswatch/ "$GITHUB_SHA" | tar -x -C "$ROOT/opt/syswatch"
+          mv "$ROOT/opt/syswatch/syswatch"/* "$ROOT/opt/syswatch/"
+          rmdir "$ROOT/opt/syswatch/syswatch"
           cat > "$ROOT/DEBIAN/control" <<EOF
           Package: syswatch
           Version: ${VERSION}
@@ -78,7 +79,7 @@ jobs:
           systemctl restart syswatch.service || systemctl start syswatch.service
           EOF
           chmod 755 "$ROOT/DEBIAN/postinst"
-          dpkg-deb --build "$ROOT"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct "$GITHUB_SHA")" dpkg-deb --build "$ROOT"
           mv "pkg/syswatch_${VERSION}_amd64.deb" .
           sha256sum "syswatch_${VERSION}_amd64.deb" > SHA256SUMS
           printf 'SYSWATCH %s\nCommit %s\n' "$VERSION" "$GITHUB_SHA" > RELEASE-METADATA.txt
