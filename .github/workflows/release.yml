@@ -136,14 +136,12 @@ jobs:
           esac
           EOF
           chmod 755 "$ROOT/DEBIAN/postrm"
-          # Normalize every package file timestamp so the archive does not
-          # depend on the wall-clock time of the release runner.
           find "$ROOT" -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} +
           SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" dpkg-deb --build "$ROOT"
           mv "pkg/syswatch_${VERSION}_amd64.deb" .
           sha256sum "syswatch_${VERSION}_amd64.deb" > SHA256SUMS
           printf 'SYSWATCH %s\nCommit %s\nSource-Date-Epoch %s\n' "$VERSION" "$GITHUB_SHA" "$SOURCE_DATE_EPOCH" > RELEASE-METADATA.txt
-      - name: Verify Debian package
+      - name: Verify Debian package and reproducibility
         shell: bash
         run: |
           set -euo pipefail
@@ -159,6 +157,9 @@ jobs:
           grep -q 'CapabilityBoundingSet=' control/postinst
           grep -q 'AmbientCapabilities=' control/postinst
           sha256sum --check SHA256SUMS
+          SOURCE_DATE_EPOCH="$(grep '^Source-Date-Epoch ' RELEASE-METADATA.txt | cut -d' ' -f2)"
+          SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" dpkg-deb --build "pkg/syswatch_${GITHUB_REF_NAME#v}_amd64" repeat.deb >/dev/null
+          cmp --silent "syswatch_${GITHUB_REF_NAME#v}_amd64.deb" repeat.deb
       - name: Attest Debian package provenance
         uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:
