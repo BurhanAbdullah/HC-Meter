@@ -12,7 +12,16 @@ jobs:
   package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          git diff --quiet "${GITHUB_SHA}"^ "${GITHUB_SHA}" -- . ':!site' || true
       - name: Build Debian package
         shell: bash
         run: |
@@ -21,6 +30,7 @@ jobs:
           ROOT="pkg/syswatch_${VERSION}_amd64"
           mkdir -p "$ROOT/DEBIAN" "$ROOT/opt/syswatch" "$ROOT/usr/local/bin"
           cp -a . "$ROOT/opt/syswatch/"
+          rm -rf "$ROOT/opt/syswatch/.git" "$ROOT/opt/syswatch/pkg"
           cat > "$ROOT/DEBIAN/control" <<EOF
           Package: syswatch
           Version: ${VERSION}
@@ -70,8 +80,20 @@ jobs:
           chmod 755 "$ROOT/DEBIAN/postinst"
           dpkg-deb --build "$ROOT"
           mv "pkg/syswatch_${VERSION}_amd64.deb" .
+          sha256sum "syswatch_${VERSION}_amd64.deb" > SHA256SUMS
+          printf 'SYSWATCH %s\nCommit %s\n' "$VERSION" "$GITHUB_SHA" > RELEASE-METADATA.txt
+      - name: Verify Debian package
+        shell: bash
+        run: |
+          set -euo pipefail
+          dpkg-deb --info syswatch_*.deb
+          dpkg-deb --contents syswatch_*.deb >/dev/null
+          sha256sum --check SHA256SUMS
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           generate_release_notes: true
-          files: syswatch_*.deb
+          files: |
+            syswatch_*.deb
+            SHA256SUMS
+            RELEASE-METADATA.txt
