@@ -35,7 +35,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RInE '^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*[^@[:space:]]+@(?![0-9a-fA-F]{40}([[:space:]]|$))' .github/workflows 2>/dev/null; then
-            echo 'Unpinned GitHub Action reference detected; use a full 40-character commit SHA.' >&2
-            exit 1
-          fi
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          pattern = re.compile(r"^\s*-?\s*uses:\s*[^@\s]+@([^\s#]+)")
+          bad = []
+          for path in Path('.github/workflows').rglob('*.yml'):
+              for lineno, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+                  match = pattern.match(line)
+                  if match and not re.fullmatch(r'[0-9a-fA-F]{40}', match.group(1)):
+                      bad.append(f'{path}:{lineno}: {match.group(1)}')
+          if bad:
+              print('Unpinned GitHub Action references:')
+              print('\n'.join(bad))
+              raise SystemExit(1)
+          print('All GitHub Action references are pinned to full commit SHAs.')
+          PY
