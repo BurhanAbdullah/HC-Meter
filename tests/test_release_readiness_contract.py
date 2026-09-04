@@ -64,27 +64,38 @@ def test_service_release_boundary_is_non_privileged():
 def test_installer_and_package_share_the_same_service_boundary():
     installer = INSTALLER.read_text(encoding="utf-8")
     builder = BUILDER.read_text(encoding="utf-8")
-    required = (
-        "User=syswatch",
-        "Group=syswatch",
+
+    # Static systemd hardening directives must remain identical across both
+    # installation paths. Service identity and state paths are intentionally
+    # emitted from fixed installer variables, so validate that relationship
+    # separately instead of requiring already-expanded literals in install.sh.
+    shared_directives = (
         "NoNewPrivileges=true",
         "PrivateDevices=true",
         "ProtectSystem=strict",
         "ProtectHome=read-only",
         "CapabilityBoundingSet=",
         "AmbientCapabilities=",
+        "StateDirectory=syswatch",
         "StateDirectoryMode=0750",
     )
-    for invariant in required:
+    for invariant in shared_directives:
         assert invariant in installer
         assert invariant in builder
 
-    # The installer emits the systemd unit from shell variables, while the
-    # package builder emits a static unit. Check the shared boundary semantics
-    # rather than requiring the installer to contain expanded literal values.
+    assert 'SERVICE_USER="syswatch"' in installer
+    assert 'SERVICE_GROUP="syswatch"' in installer
+    assert 'User=$SERVICE_USER' in installer
+    assert 'Group=$SERVICE_GROUP' in installer
+    assert "User=syswatch" in builder
+    assert "Group=syswatch" in builder
+
+    assert 'STATE_DIR="/var/lib/syswatch"' in installer
     assert 'Environment=SYSWATCH_STATE_DIR=$STATE_DIR' in installer
     assert 'ReadWritePaths=$STATE_DIR' in installer
-    assert 'StateDirectory=syswatch' in installer
+    assert "Environment=SYSWATCH_STATE_DIR=/var/lib/syswatch" in builder
+    assert "ReadWritePaths=/var/lib/syswatch" in builder
+
     assert 'export SYSWATCH_STATE_DIR="${SYSWATCH_STATE_DIR:-/var/lib/syswatch}"' in installer
     assert 'url = "http://127.0.0.1:8080/api/health"' in installer
 
