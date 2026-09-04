@@ -44,12 +44,14 @@ jobs:
         run: |
           set -euo pipefail
           git show-ref --verify --quiet "refs/tags/${{ steps.release.outputs.ref_name }}"
-          test "$(git rev-list -n 1 "refs/tags/${{ steps.release.outputs.ref_name }}")" = "$GITHUB_SHA"
+          RELEASE_SHA="$(git rev-list -n 1 "refs/tags/${{ steps.release.outputs.ref_name }}")"
+          test "$RELEASE_SHA" = "$(git rev-parse HEAD)"
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_ENV"
       - name: Build Debian package with shared builder
         shell: bash
         run: |
           set -euo pipefail
-          bash packaging/build_deb.sh "${{ steps.release.outputs.version }}" "$GITHUB_SHA"
+          bash packaging/build_deb.sh "${{ steps.release.outputs.version }}" "$RELEASE_SHA"
       - name: Verify Debian package and reproducibility
         shell: bash
         run: |
@@ -71,7 +73,7 @@ jobs:
           sha256sum --check SHA256SUMS
 
           # Rebuild through the exact same repository builder and compare bytes.
-          bash packaging/build_deb.sh "$VERSION" "$GITHUB_SHA"
+          bash packaging/build_deb.sh "$VERSION" "$RELEASE_SHA"
           cmp --silent first-build.deb "$PACKAGE"
       - name: Verify packaged install lifecycle
         shell: bash
