@@ -63,11 +63,11 @@ def test_public_documentation_keeps_platform_and_security_claims_bounded():
     )
     for claim in required_claims:
         assert claim in text
-    # The README may express the limitation in different wording; reject
-    # accidental universal-accuracy claims rather than requiring one sentence.
+    # The README intentionally states the limitation; reject only affirmative
+    # claims of universal or guaranteed malware-detection accuracy.
     forbidden = (
-        "universal real-world malware detection accuracy",
         "100% malware detection",
         "guaranteed malware detection",
+        "detects all malware",
     )
     assert not any(claim in text for claim in forbidden)
