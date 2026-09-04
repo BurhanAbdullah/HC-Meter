@@ -263,13 +263,21 @@ systemctl enable --now "$APP_NAME.service"
 # the application health contract itself, not merely an HTTP response.
 python3 - <<'PY'
 import json
+import os
 import time
 import urllib.error
 import urllib.request
 
 url = "http://127.0.0.1:8080/api/health"
+try:
+    attempts = int(os.environ.get("SYSWATCH_INSTALL_HEALTH_ATTEMPTS", "30"))
+except ValueError:
+    attempts = 30
+# Keep failure injection fast in CI without permitting an unbounded installer
+# wait. Production uses the default of 30 attempts.
+attempts = max(1, min(attempts, 120))
 last = None
-for _ in range(30):
+for _ in range(attempts):
     try:
         with urllib.request.urlopen(url, timeout=2) as response:
             if response.status != 200:
