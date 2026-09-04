@@ -57,7 +57,7 @@ git -C "$BAD" add syswatch/api/server.py
 git -C "$BAD" commit -q -m "test fixture: unhealthy service"
 
 # 1. Failed first install must return the runner to the exact no-install state.
-if sudo env SYSWATCH_REPO="$BAD" SYSWATCH_REF=main bash "$ROOT/install.sh"; then
+if sudo env SYSWATCH_REPO="$BAD" SYSWATCH_REF=main SYSWATCH_INSTALL_HEALTH_ATTEMPTS=3 bash "$ROOT/install.sh"; then
   echo "unhealthy first install unexpectedly succeeded" >&2
   exit 1
 fi
@@ -90,7 +90,7 @@ cp /usr/local/bin/syswatch "$TMP/bin.before"
 cp /usr/local/bin/syswatch-signal "$TMP/signal.before"
 
 # 3. A failed upgrade must restore code, state, wrappers, unit and runtime state.
-if sudo env SYSWATCH_REPO="$BAD" SYSWATCH_REF=main bash "$ROOT/install.sh"; then
+if sudo env SYSWATCH_REPO="$BAD" SYSWATCH_REF=main SYSWATCH_INSTALL_HEALTH_ATTEMPTS=3 bash "$ROOT/install.sh"; then
   echo "unhealthy upgrade unexpectedly succeeded" >&2
   exit 1
 fi
