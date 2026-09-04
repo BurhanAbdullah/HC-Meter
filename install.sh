@@ -24,11 +24,41 @@ command -v useradd >/dev/null || { echo "useradd is required"; exit 1; }
 command -v groupadd >/dev/null || { echo "groupadd is required"; exit 1; }
 command -v getent >/dev/null || { echo "getent is required"; exit 1; }
 
-# Ref names are accepted for convenience, but shell metacharacters and
-# ambiguous revisions are rejected before any host mutation occurs.
 git check-ref-format --allow-onelevel "$REF" >/dev/null 2>&1 || {
   echo "Invalid SYSWATCH_REF: $REF" >&2
   exit 1
+}
+
+verify_local_health() {
+  python3 - <<'PY'
+import json
+import os
+import time
+import urllib.error
+import urllib.request
+
+url = "http://127.0.0.1:8080/api/health"
+try:
+    attempts = int(os.environ.get("SYSWATCH_INSTALL_HEALTH_ATTEMPTS", "30"))
+except ValueError:
+    attempts = 30
+attempts = max(1, min(attempts, 120))
+last = None
+for attempt in range(attempts):
+    try:
+        with urllib.request.urlopen(url, timeout=2) as response:
+            if response.status != 200:
+                raise RuntimeError(f"unexpected HTTP status {response.status}")
+            payload = json.load(response)
+            if payload == {"ok": True, "service": "syswatch", "agent": "online"}:
+                raise SystemExit(0)
+            raise RuntimeError(f"unexpected health payload: {payload!r}")
+    except (OSError, urllib.error.URLError, json.JSONDecodeError, UnicodeDecodeError, RuntimeError) as exc:
+        last = exc
+        if attempt + 1 < attempts:
+            time.sleep(1)
+raise SystemExit(f"SYSWATCH health check failed: {last}")
+PY
 }
 
 TMP="$(mktemp -d)"
@@ -49,9 +79,6 @@ SERVICE_WAS_ENABLED=0
 SERVICE_WAS_ACTIVE=0
 trap 'rm -rf "$TMP"' EXIT
 
-# Snapshot mutable host-facing artifacts before any installation mutation so a
-# failed first install leaves no residue and a failed upgrade restores the
-# previous service/wrappers exactly.
 if [[ -e "$SERVICE" ]]; then
   SERVICE_BACKUP="$TMP/service-backup"
   cp -a "$SERVICE" "$SERVICE_BACKUP"
@@ -94,9 +121,6 @@ rollback() {
     mv "$BACKUP" "$PREFIX"
   fi
 
-  # Restore a pre-existing state boundary exactly. A state directory created
-  # by this failed first install is removed instead of being snapshotted and
-  # resurrected as orphaned residue.
   rm -rf "$STATE_DIR"
   if [[ "$STATE_PREEXISTED" -eq 1 && -n "$STATE_BACKUP" && -d "$STATE_BACKUP" ]]; then
     mv "$STATE_BACKUP" "$STATE_DIR"
@@ -110,7 +134,16 @@ rollback() {
       systemctl disable "$APP_NAME.service" >/dev/null 2>&1 || true
     fi
     if [[ "$SERVICE_WAS_ACTIVE" -eq 1 ]]; then
-      systemctl start "$APP_NAME.service" >/dev/null 2>&1 || true
+      if systemctl start "$APP_NAME.service" >/dev/null 2>&1; then
+        if ! verify_local_health; then
+          echo "WARNING: previous SYSWATCH installation was restored but did not return to a healthy state." >&2
+          systemctl status "$APP_NAME.service" --no-pager >&2 || true
+          journalctl -u "$APP_NAME.service" -n 80 --no-pager >&2 || true
+        fi
+      else
+        echo "WARNING: previous SYSWATCH installation was restored but its service could not be restarted." >&2
+        systemctl status "$APP_NAME.service" --no-pager >&2 || true
+      fi
     else
       systemctl stop "$APP_NAME.service" >/dev/null 2>&1 || true
     fi
@@ -134,7 +167,6 @@ on_error() {
 }
 trap on_error ERR
 
-# The daemon never needs a login shell or administrative identity.
 if ! getent group "$SERVICE_GROUP" >/dev/null; then
   groupadd --system "$SERVICE_GROUP"
   CREATED_GROUP=1
@@ -157,19 +189,15 @@ CLONE="$TMP/syswatch"
 git clone --depth 1 --branch "$REF" "$REPO" "$CLONE" >/dev/null 2>&1
 git -C "$CLONE" rev-parse --verify HEAD >/dev/null
 
-# Stage the complete version before touching the active installation.
 STAGED="$TMP/installed"
 mkdir -p "$STAGED"
 cp -a "$CLONE/." "$STAGED/"
 
-# Preserve the legacy in-tree runtime on first upgrade into the dedicated
-# service state directory. Existing protected state is never regenerated here.
 if [[ -d "$PREFIX/runtime" ]]; then
   cp -a "$PREFIX/runtime/." "$STATE_DIR/"
   chown -R "$SERVICE_USER:$SERVICE_GROUP" "$STATE_DIR"
 fi
 
-# Stop the active service only after a complete staged tree exists.
 systemctl disable --now "$APP_NAME.service" >/dev/null 2>&1 || true
 
 if [[ -e "$PREFIX" ]]; then
@@ -258,45 +286,10 @@ chmod 0755 "$PREFIX/uninstall.sh"
 systemctl daemon-reload
 systemctl enable --now "$APP_NAME.service"
 
-# Local health verification is release-blocking. The API is intentionally
-# bound to loopback, so this does not expose a remote validation path. Require
-# the application health contract itself, not merely an HTTP response.
-python3 - <<'PY'
-import json
-import os
-import time
-import urllib.error
-import urllib.request
+# A new install/upgrade is committed only after the exact application health
+# identity is observable on loopback.
+verify_local_health
 
-url = "http://127.0.0.1:8080/api/health"
-try:
-    attempts = int(os.environ.get("SYSWATCH_INSTALL_HEALTH_ATTEMPTS", "30"))
-except ValueError:
-    attempts = 30
-# Keep failure injection fast in CI without permitting an unbounded installer
-# wait. Production uses the default of 30 attempts.
-attempts = max(1, min(attempts, 120))
-last = None
-for _ in range(attempts):
-    try:
-        with urllib.request.urlopen(url, timeout=2) as response:
-            if response.status != 200:
-                raise RuntimeError(f"unexpected HTTP status {response.status}")
-            payload = json.load(response)
-            if (
-                payload.get("ok") is True
-                and payload.get("service") == "syswatch"
-                and payload.get("agent") == "online"
-            ):
-                raise SystemExit(0)
-            raise RuntimeError(f"unexpected health payload: {payload!r}")
-    except (OSError, urllib.error.URLError, json.JSONDecodeError, UnicodeDecodeError, RuntimeError) as exc:
-        last = exc
-        time.sleep(1)
-raise SystemExit(f"SYSWATCH health check failed: {last}")
-PY
-
-# The new installation is healthy; discard rollback snapshots only now.
 if [[ -n "$BACKUP" && -d "$BACKUP" ]]; then
   rm -rf "$BACKUP"
 fi
