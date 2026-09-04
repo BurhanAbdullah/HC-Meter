@@ -23,6 +23,8 @@ def test_installer_stages_before_swapping_active_tree():
 def test_installer_has_transactional_state_rollback():
     text = INSTALLER.read_text(encoding="utf-8")
     required = (
+        'STATE_PREEXISTED=0',
+        'STATE_PREEXISTED=1',
         'STATE_BACKUP="$TMP/state-backup"',
         'cp -a "$STATE_DIR" "$STATE_BACKUP"',
         'rm -rf "$STATE_DIR"',
@@ -31,6 +33,33 @@ def test_installer_has_transactional_state_rollback():
         'CREATED_GROUP=0',
         'STATE_CREATED=0',
         'trap on_error ERR',
+    )
+    for invariant in required:
+        assert invariant in text
+
+    # A first install must create state only in the no-preexisting-state branch;
+    # rollback restores a backup only when that state existed beforehand.
+    assert 'if [[ -d "$STATE_DIR" ]]; then\n  STATE_PREEXISTED=1' in text
+    assert 'if [[ "$STATE_PREEXISTED" -eq 1 && -n "$STATE_BACKUP" && -d "$STATE_BACKUP" ]]; then' in text
+
+
+def test_installer_restores_service_wrappers_and_service_state_on_failure():
+    text = INSTALLER.read_text(encoding="utf-8")
+    required = (
+        'SERVICE_BACKUP="$TMP/service-backup"',
+        'BIN_BACKUP="$TMP/bin-backup"',
+        'SIGNAL_BIN_BACKUP="$TMP/signal-bin-backup"',
+        'SERVICE_PREEXISTED=1',
+        'BIN_PREEXISTED=1',
+        'SIGNAL_BIN_PREEXISTED=1',
+        'SERVICE_WAS_ENABLED=1',
+        'SERVICE_WAS_ACTIVE=1',
+        'rm -f "$SERVICE" "$BIN" "$SIGNAL_BIN"',
+        'cp -a "$SERVICE_BACKUP" "$SERVICE"',
+        'cp -a "$BIN_BACKUP" "$BIN"',
+        'cp -a "$SIGNAL_BIN_BACKUP" "$SIGNAL_BIN"',
+        'systemctl enable "$APP_NAME.service"',
+        'systemctl start "$APP_NAME.service"',
     )
     for invariant in required:
         assert invariant in text
