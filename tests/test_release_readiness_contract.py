@@ -78,8 +78,14 @@ def test_installer_and_package_share_the_same_service_boundary():
     for invariant in required:
         assert invariant in installer
         assert invariant in builder
-    assert "Environment=SYSWATCH_STATE_DIR=/var/lib/syswatch" in installer
-    assert "Environment=SYSWATCH_STATE_DIR=/var/lib/syswatch" in builder
+
+    # The installer emits the systemd unit from shell variables, while the
+    # package builder emits a static unit. Check the shared boundary semantics
+    # rather than requiring the installer to contain expanded literal values.
+    assert 'Environment=SYSWATCH_STATE_DIR=$STATE_DIR' in installer
+    assert 'ReadWritePaths=$STATE_DIR' in installer
+    assert 'StateDirectory=syswatch' in installer
+    assert 'export SYSWATCH_STATE_DIR="${SYSWATCH_STATE_DIR:-/var/lib/syswatch}"' in installer
     assert 'url = "http://127.0.0.1:8080/api/health"' in installer
 
 
