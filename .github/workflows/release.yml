@@ -54,6 +54,11 @@ jobs:
           # Rebuild through the exact same repository builder and compare bytes.
           bash packaging/build_deb.sh "$VERSION" "$GITHUB_SHA"
           cmp --silent first-build.deb "$PACKAGE"
+      - name: Verify packaged install lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo bash tests/test_debian_lifecycle.sh "$(pwd)/syswatch_${GITHUB_REF_NAME#v}_amd64.deb"
       - name: Attest Debian package provenance
         uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:
