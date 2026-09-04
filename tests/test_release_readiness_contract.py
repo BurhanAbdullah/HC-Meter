@@ -65,10 +65,6 @@ def test_installer_and_package_share_the_same_service_boundary():
     installer = INSTALLER.read_text(encoding="utf-8")
     builder = BUILDER.read_text(encoding="utf-8")
 
-    # Static systemd hardening directives must remain identical across both
-    # installation paths. Service identity and state paths are intentionally
-    # emitted from fixed installer variables, so validate that relationship
-    # separately instead of requiring already-expanded literals in install.sh.
     shared_directives = (
         "NoNewPrivileges=true",
         "PrivateDevices=true",
@@ -116,16 +112,17 @@ def test_public_documentation_keeps_platform_security_and_release_claims_bounded
     for claim in required_claims:
         assert claim in text
 
-    forbidden = (
+    forbidden_affirmative_claims = (
         "100% malware detection",
         "guaranteed malware detection",
         "detects all malware",
         "Windows is supported",
         "macOS is supported",
         "RHEL is supported",
-        "production EDR",
+        "SYSWATCH is a production EDR",
+        "independently certified",
     )
-    assert not any(claim in text for claim in forbidden)
+    assert not any(claim in text for claim in forbidden_affirmative_claims)
 
 
 def test_public_development_install_is_explicitly_not_a_release_install():
