@@ -30,7 +30,7 @@ jobs:
       - name: Run unit and adversarial synthetic tests
         run: python -m pytest -q
       - name: Validate shell syntax
-        run: bash -n install.sh syswatch/agents/feed_signal.sh packaging/build_deb.sh
+        run: bash -n install.sh syswatch/agents/feed_signal.sh packaging/build_deb.sh tests/test_installer_transaction.sh
       - name: Validate installer lifecycle contract
         run: python -m pytest -q tests/test_installer_contract.py
       - name: Validate least-privilege service contract
@@ -55,6 +55,17 @@ jobs:
               raise SystemExit(1)
           print('All GitHub Action references are pinned to full commit SHAs.')
           PY
+
+  installer-transaction:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Exercise failed first-install and upgrade rollback
+        run: bash tests/test_installer_transaction.sh
 
   debian-lifecycle:
     runs-on: ubuntu-latest
