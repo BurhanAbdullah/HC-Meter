@@ -6,6 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 RELEASE = WORKFLOWS / "release.yml"
 README = ROOT / "README.md"
+INSTALLER = ROOT / "install.sh"
+BUILDER = ROOT / "packaging" / "build_deb.sh"
 
 
 def test_all_workflow_actions_are_immutable():
@@ -43,7 +45,7 @@ def test_release_contract_is_versioned_and_reproducible():
 
 
 def test_service_release_boundary_is_non_privileged():
-    builder = (ROOT / "packaging" / "build_deb.sh").read_text(encoding="utf-8")
+    builder = BUILDER.read_text(encoding="utf-8")
     required = (
         "User=syswatch",
         "Group=syswatch",
@@ -59,6 +61,28 @@ def test_service_release_boundary_is_non_privileged():
         assert invariant in builder
 
 
+def test_installer_and_package_share_the_same_service_boundary():
+    installer = INSTALLER.read_text(encoding="utf-8")
+    builder = BUILDER.read_text(encoding="utf-8")
+    required = (
+        "User=syswatch",
+        "Group=syswatch",
+        "NoNewPrivileges=true",
+        "PrivateDevices=true",
+        "ProtectSystem=strict",
+        "ProtectHome=read-only",
+        "CapabilityBoundingSet=",
+        "AmbientCapabilities=",
+        "StateDirectoryMode=0750",
+    )
+    for invariant in required:
+        assert invariant in installer
+        assert invariant in builder
+    assert "Environment=SYSWATCH_STATE_DIR=/var/lib/syswatch" in installer
+    assert "Environment=SYSWATCH_STATE_DIR=/var/lib/syswatch" in builder
+    assert 'url = "http://127.0.0.1:8080/api/health"' in installer
+
+
 def test_public_documentation_keeps_platform_and_security_claims_bounded():
     text = README.read_text(encoding="utf-8")
     required_claims = (
@@ -69,8 +93,6 @@ def test_public_documentation_keeps_platform_and_security_claims_bounded():
     )
     for claim in required_claims:
         assert claim in text
-    # The README intentionally states the limitation; reject only affirmative
-    # claims of universal or guaranteed malware-detection accuracy.
     forbidden = (
         "100% malware detection",
         "guaranteed malware detection",
