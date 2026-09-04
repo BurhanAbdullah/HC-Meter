@@ -21,8 +21,11 @@ command -v git >/dev/null || { echo "git is required"; exit 1; }
 command -v python3 >/dev/null || { echo "python3 is required"; exit 1; }
 command -v systemctl >/dev/null || { echo "systemd/systemctl is required"; exit 1; }
 command -v useradd >/dev/null || { echo "useradd is required"; exit 1; }
+command -v groupadd >/dev/null || { echo "groupadd is required"; exit 1; }
 command -v getent >/dev/null || { echo "getent is required"; exit 1; }
 
+# Ref names are accepted for convenience, but shell metacharacters and
+# ambiguous revisions are rejected before any host mutation occurs.
 git check-ref-format --allow-onelevel "$REF" >/dev/null 2>&1 || {
   echo "Invalid SYSWATCH_REF: $REF" >&2
   exit 1
@@ -30,7 +33,11 @@ git check-ref-format --allow-onelevel "$REF" >/dev/null 2>&1 || {
 
 TMP="$(mktemp -d)"
 BACKUP=""
+STATE_BACKUP=""
 SWAPPED=0
+CREATED_GROUP=0
+CREATED_USER=0
+STATE_CREATED=0
 trap 'rm -rf "$TMP"' EXIT
 
 rollback() {
@@ -40,15 +47,32 @@ rollback() {
   if [[ -n "$BACKUP" && -d "$BACKUP" ]]; then
     mv "$BACKUP" "$PREFIX"
   fi
+
+  # Restore the state boundary exactly as it existed before installation.
+  rm -rf "$STATE_DIR"
+  if [[ -n "$STATE_BACKUP" && -d "$STATE_BACKUP" ]]; then
+    mv "$STATE_BACKUP" "$STATE_DIR"
+  fi
+
   systemctl daemon-reload >/dev/null 2>&1 || true
   if [[ -d "$PREFIX" ]]; then
     systemctl enable --now "$APP_NAME.service" >/dev/null 2>&1 || true
+  fi
+
+  if [[ "$STATE_CREATED" -eq 1 && ! -d "$STATE_DIR" ]]; then
+    true
+  fi
+  if [[ "$CREATED_USER" -eq 1 ]] && getent passwd "$SERVICE_USER" >/dev/null; then
+    userdel "$SERVICE_USER" >/dev/null 2>&1 || true
+  fi
+  if [[ "$CREATED_GROUP" -eq 1 ]] && getent group "$SERVICE_GROUP" >/dev/null; then
+    groupdel "$SERVICE_GROUP" >/dev/null 2>&1 || true
   fi
 }
 
 on_error() {
   local rc=$?
-  if [[ "$SWAPPED" -eq 1 ]]; then
+  if [[ "$SWAPPED" -eq 1 || "$CREATED_USER" -eq 1 || "$CREATED_GROUP" -eq 1 || "$STATE_CREATED" -eq 1 ]]; then
     echo "SYSWATCH installation failed; restoring the previous installation." >&2
     rollback
   fi
@@ -59,11 +83,22 @@ trap on_error ERR
 # The daemon never needs a login shell or administrative identity.
 if ! getent group "$SERVICE_GROUP" >/dev/null; then
   groupadd --system "$SERVICE_GROUP"
+  CREATED_GROUP=1
 fi
 if ! getent passwd "$SERVICE_USER" >/dev/null; then
   useradd --system --gid "$SERVICE_GROUP" --home-dir "$STATE_DIR" --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
+  CREATED_USER=1
 fi
-install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STATE_DIR"
+if [[ ! -d "$STATE_DIR" ]]; then
+  install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$STATE_DIR"
+  STATE_CREATED=1
+fi
+
+# Snapshot the persistent state before any migration or service change.
+if [[ -d "$STATE_DIR" ]]; then
+  STATE_BACKUP="$TMP/state-backup"
+  cp -a "$STATE_DIR" "$STATE_BACKUP"
+fi
 
 CLONE="$TMP/syswatch"
 git clone --depth 1 --branch "$REF" "$REPO" "$CLONE" >/dev/null 2>&1
@@ -145,6 +180,7 @@ CapabilityBoundingSet=
 AmbientCapabilities=
 ReadWritePaths=$STATE_DIR
 StateDirectory=syswatch
+StateDirectoryMode=0750
 
 [Install]
 WantedBy=multi-user.target
@@ -176,24 +212,30 @@ import time
 import urllib.error
 import urllib.request
 
-url = "http://127.0.0.1:8080/"
+url = "http://127.0.0.1:8080/api/health"
 last = None
-for _ in range(20):
+for _ in range(30):
     try:
-        with urllib.request.urlopen(url, timeout=1) as response:
+        with urllib.request.urlopen(url, timeout=2) as response:
             if 200 <= response.status < 500:
                 raise SystemExit(0)
     except (OSError, urllib.error.URLError) as exc:
         last = exc
-        time.sleep(0.5)
+        time.sleep(1)
 raise SystemExit(f"SYSWATCH health check failed: {last}")
 PY
 
-# The new installation is healthy; discard the rollback tree only now.
+# The new installation is healthy; discard rollback snapshots only now.
 if [[ -n "$BACKUP" && -d "$BACKUP" ]]; then
   rm -rf "$BACKUP"
 fi
+if [[ -n "$STATE_BACKUP" && -d "$STATE_BACKUP" ]]; then
+  rm -rf "$STATE_BACKUP"
+fi
 SWAPPED=0
+CREATED_USER=0
+CREATED_GROUP=0
+STATE_CREATED=0
 
 printf '\nSYSWATCH PRO installed successfully.\n'
 printf 'Version/ref: %s\n' "$REF"
