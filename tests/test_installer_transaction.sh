@@ -98,7 +98,7 @@ fi
 sudo systemctl is-enabled syswatch.service >/dev/null
 sudo systemctl is-active syswatch.service >/dev/null
 [[ "$(git -C /opt/syswatch rev-parse HEAD)" == "$good_commit" ]]
-[[ "$(cat /var/lib/syswatch/rollback-marker)" == "preserve-me" ]]
+[[ "$(sudo cat /var/lib/syswatch/rollback-marker)" == "preserve-me" ]]
 cmp -s "$TMP/service.before" /etc/systemd/system/syswatch.service
 cmp -s "$TMP/bin.before" /usr/local/bin/syswatch
 cmp -s "$TMP/signal.before" /usr/local/bin/syswatch-signal
