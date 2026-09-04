@@ -37,8 +37,6 @@ def test_installer_has_transactional_state_rollback():
     for invariant in required:
         assert invariant in text
 
-    # A first install must create state only in the no-preexisting-state branch;
-    # rollback restores a backup only when that state existed beforehand.
     assert 'if [[ -d "$STATE_DIR" ]]; then\n  STATE_PREEXISTED=1' in text
     assert 'if [[ "$STATE_PREEXISTED" -eq 1 && -n "$STATE_BACKUP" && -d "$STATE_BACKUP" ]]; then' in text
 
@@ -60,6 +58,8 @@ def test_installer_restores_service_wrappers_and_service_state_on_failure():
         'cp -a "$SIGNAL_BIN_BACKUP" "$SIGNAL_BIN"',
         'systemctl enable "$APP_NAME.service"',
         'systemctl start "$APP_NAME.service"',
+        'if ! verify_local_health; then',
+        'previous SYSWATCH installation was restored but did not return to a healthy state',
     )
     for invariant in required:
         assert invariant in text
@@ -85,9 +85,11 @@ def test_installer_service_is_non_privileged_and_local_only():
 
 def test_installer_health_check_is_release_blocking():
     text = INSTALLER.read_text(encoding="utf-8")
+    assert 'verify_local_health() {' in text
     assert 'raise SystemExit(f"SYSWATCH health check failed: {last}")' in text
-    assert 'systemctl enable --now "$APP_NAME.service"' in text
-    assert text.index('systemctl enable --now "$APP_NAME.service"') < text.index('raise SystemExit(f"SYSWATCH health check failed: {last}")')
+    enable = text.rindex('systemctl enable --now "$APP_NAME.service"')
+    health_call = text.rindex('\nverify_local_health\n')
+    assert enable < health_call
 
 
 def test_installer_health_check_requires_expected_application_contract():
@@ -95,13 +97,12 @@ def test_installer_health_check_requires_expected_application_contract():
     required = (
         'if response.status != 200:',
         'payload = json.load(response)',
-        'payload.get("ok") is True',
-        'payload.get("service") == "syswatch"',
-        'payload.get("agent") == "online"',
+        'payload == {"ok": True, "service": "syswatch", "agent": "online"}',
         'raise RuntimeError(f"unexpected health payload: {payload!r}")',
+        'SYSWATCH_INSTALL_HEALTH_ATTEMPTS',
+        'attempts = max(1, min(attempts, 120))',
     )
     for invariant in required:
         assert invariant in text
 
-    # Do not regress to treating arbitrary 2xx/3xx/4xx responses as healthy.
     assert 'if 200 <= response.status < 500:' not in text
