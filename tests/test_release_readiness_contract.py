@@ -129,4 +129,4 @@ def test_public_development_install_is_explicitly_not_a_release_install():
     text = README.read_text(encoding="utf-8")
     assert "sudo SYSWATCH_REF=main ./install.sh" in text
     assert "There is not yet a public versioned release install command" in text
-    assert "not a substitute for a versioned release artifact" in text
+    assert "**not** a substitute for a versioned release artifact" in text
