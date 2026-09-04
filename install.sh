@@ -206,8 +206,10 @@ systemctl daemon-reload
 systemctl enable --now "$APP_NAME.service"
 
 # Local health verification is release-blocking. The API is intentionally
-# bound to loopback, so this does not expose a remote validation path.
+# bound to loopback, so this does not expose a remote validation path. Require
+# the application health contract itself, not merely an HTTP response.
 python3 - <<'PY'
+import json
 import time
 import urllib.error
 import urllib.request
@@ -217,9 +219,17 @@ last = None
 for _ in range(30):
     try:
         with urllib.request.urlopen(url, timeout=2) as response:
-            if 200 <= response.status < 500:
+            if response.status != 200:
+                raise RuntimeError(f"unexpected HTTP status {response.status}")
+            payload = json.load(response)
+            if (
+                payload.get("ok") is True
+                and payload.get("service") == "syswatch"
+                and payload.get("agent") == "online"
+            ):
                 raise SystemExit(0)
-    except (OSError, urllib.error.URLError) as exc:
+            raise RuntimeError(f"unexpected health payload: {payload!r}")
+    except (OSError, urllib.error.URLError, json.JSONDecodeError, UnicodeDecodeError, RuntimeError) as exc:
         last = exc
         time.sleep(1)
 raise SystemExit(f"SYSWATCH health check failed: {last}")
