@@ -9,7 +9,7 @@ def test_installer_validates_before_host_mutation():
     text = INSTALLER.read_text(encoding="utf-8")
     assert 'git check-ref-format --allow-onelevel "$REF"' in text
     assert text.index('git check-ref-format --allow-onelevel "$REF"') < text.index('groupadd --system "$SERVICE_GROUP"')
-    assert text.index('git clone --depth 1 --branch "$REF"') < text.index('systemctl disable --now "$APP_NAME.service"')
+    assert text.index('git clone --depth 1 --branch "$REF"') < text.index('mv "$STAGED" "$PREFIX"')
 
 
 def test_installer_stages_before_swapping_active_tree():
