@@ -32,7 +32,7 @@ jobs:
       - name: Validate shell syntax
         run: bash -n install.sh syswatch/agents/feed_signal.sh packaging/build_deb.sh
       - name: Validate installer lifecycle contract
-        run: bash tests/test_installer_contract.sh
+        run: python -m pytest -q tests/test_installer_contract.py
       - name: Validate least-privilege service contract
         run: bash tests/test_service_security_contract.sh
       - name: Enforce immutable workflow action references
