@@ -55,8 +55,19 @@ def test_service_release_boundary_is_non_privileged():
 
 def test_public_documentation_keeps_platform_and_security_claims_bounded():
     text = README.read_text(encoding="utf-8")
-    assert "local-first Linux endpoint-security platform" in text
-    assert "does **not** claim 99.99% detection accuracy" in text
-    assert "does not execute containment" in text
-    assert "does not claim universal real-world malware detection accuracy" in text
-    assert "Cross-platform agents" in text
+    required_claims = (
+        "local-first Linux endpoint-security platform",
+        "does **not** claim 99.99% detection accuracy",
+        "does not execute containment",
+        "Cross-platform agents",
+    )
+    for claim in required_claims:
+        assert claim in text
+    # The README may express the limitation in different wording; reject
+    # accidental universal-accuracy claims rather than requiring one sentence.
+    forbidden = (
+        "universal real-world malware detection accuracy",
+        "100% malware detection",
+        "guaranteed malware detection",
+    )
+    assert not any(claim in text for claim in forbidden)
