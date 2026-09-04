@@ -6,7 +6,7 @@ TMP="$(mktemp -d)"
 GOOD="$TMP/good"
 BAD="$TMP/bad"
 
-cleanup() {
+host_cleanup() {
   set +e
   sudo systemctl disable --now syswatch.service >/dev/null 2>&1 || true
   sudo rm -f /etc/systemd/system/syswatch.service /usr/local/bin/syswatch /usr/local/bin/syswatch-signal
@@ -14,6 +14,12 @@ cleanup() {
   if getent passwd syswatch >/dev/null; then sudo userdel syswatch >/dev/null 2>&1 || true; fi
   if getent group syswatch >/dev/null; then sudo groupdel syswatch >/dev/null 2>&1 || true; fi
   sudo systemctl daemon-reload >/dev/null 2>&1 || true
+  set -e
+}
+
+cleanup() {
+  set +e
+  host_cleanup
   rm -rf "$TMP"
 }
 trap cleanup EXIT
@@ -28,8 +34,7 @@ assert_absent() {
 
 # Every CI job gets an isolated runner, but start from a deliberately known
 # state so this test cannot accidentally pass because of pre-existing files.
-cleanup
-trap cleanup EXIT
+host_cleanup
 
 # Build local repositories so the lifecycle test never depends on an external
 # network clone after checkout.
