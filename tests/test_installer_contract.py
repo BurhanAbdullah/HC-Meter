@@ -59,3 +59,20 @@ def test_installer_health_check_is_release_blocking():
     assert 'raise SystemExit(f"SYSWATCH health check failed: {last}")' in text
     assert 'systemctl enable --now "$APP_NAME.service"' in text
     assert text.index('systemctl enable --now "$APP_NAME.service"') < text.index('raise SystemExit(f"SYSWATCH health check failed: {last}")')
+
+
+def test_installer_health_check_requires_expected_application_contract():
+    text = INSTALLER.read_text(encoding="utf-8")
+    required = (
+        'if response.status != 200:',
+        'payload = json.load(response)',
+        'payload.get("ok") is True',
+        'payload.get("service") == "syswatch"',
+        'payload.get("agent") == "online"',
+        'raise RuntimeError(f"unexpected health payload: {payload!r}")',
+    )
+    for invariant in required:
+        assert invariant in text
+
+    # Do not regress to treating arbitrary 2xx/3xx/4xx responses as healthy.
+    assert 'if 200 <= response.status < 500:' not in text
