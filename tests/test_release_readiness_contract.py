@@ -30,18 +30,29 @@ def test_release_cannot_publish_before_artifact_lifecycle_gate():
     assert "tests/test_debian_lifecycle.sh" in text
 
 
-def test_release_contract_is_versioned_and_reproducible():
+def test_release_contract_is_versioned_reproducible_and_identity_bound():
     text = RELEASE.read_text(encoding="utf-8")
-    assert "workflow_dispatch:" in text
-    assert "release_tag:" in text
-    assert 'REF_NAME="${{ inputs.release_tag }}"' in text
-    assert 'REF_NAME="${GITHUB_REF_NAME}"' in text
-    assert '[[ "$REF_NAME" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]' in text
-    assert 'git show-ref --verify --quiet "refs/tags/${{ steps.release.outputs.ref_name }}"' in text
-    assert 'test "$RELEASE_SHA" = "$(git rev-parse HEAD)"' in text
-    assert "sha256sum --check SHA256SUMS" in text
-    assert "cmp --silent first-build.deb \"$PACKAGE\"" in text
-    assert "RELEASE-METADATA.txt" in text
+    required = (
+        "workflow_dispatch:",
+        "release_tag:",
+        'REF_NAME="${{ inputs.release_tag }}"',
+        'REF_NAME="${GITHUB_REF_NAME}"',
+        '[[ "$REF_NAME" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]',
+        'git show-ref --verify --quiet "refs/tags/${{ steps.release.outputs.ref_name }}"',
+        'test "$RELEASE_SHA" = "$(git rev-parse HEAD)"',
+        'grep -Fxq "Version: $VERSION" control/control',
+        "grep -Fxq 'Architecture: amd64' control/control",
+        'EXPECTED_SUM="$(sha256sum "$PACKAGE")"',
+        'test "$(cat SHA256SUMS)" = "$EXPECTED_SUM"',
+        "sha256sum --check SHA256SUMS",
+        'grep -Fxq "SYSWATCH $VERSION" RELEASE-METADATA.txt',
+        'grep -Fxq "Commit $RELEASE_SHA" RELEASE-METADATA.txt',
+        'grep -Fxq "Source-Date-Epoch $SOURCE_EPOCH" RELEASE-METADATA.txt',
+        'cmp --silent first-build.deb "$PACKAGE"',
+        'test "$(cat SHA256SUMS)" = "$(sha256sum "$PACKAGE")"',
+    )
+    for invariant in required:
+        assert invariant in text
 
 
 def test_service_release_boundary_is_non_privileged():
