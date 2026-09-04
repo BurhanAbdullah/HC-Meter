@@ -1,4 +1,4 @@
-# SYSWATCH PRO
+# SYSWATCH
 
 **SYSWATCH** is a local-first Linux endpoint-security project that turns host telemetry and normalized security signals into causal attack context for a local operator console.
 
@@ -92,7 +92,6 @@ The Debian lifecycle gate separately verifies package purge behavior, including 
 Linux endpoint
     │
     ├── host / process / network / security collectors
-    │
     ▼
 normalized bounded signals
     │
@@ -101,7 +100,6 @@ temporal correlation + causal evidence
     │
     ├── protected local state
     ├── bounded prediction / policy evidence
-    │
     ▼
 localhost API + operator dashboard
 ```
