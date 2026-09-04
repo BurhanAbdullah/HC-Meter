@@ -58,23 +58,36 @@ jobs:
           set -euo pipefail
           VERSION="${{ steps.release.outputs.version }}"
           PACKAGE="syswatch_${VERSION}_amd64.deb"
+          SOURCE_EPOCH="$(git show -s --format=%ct "$RELEASE_SHA")"
           cp "$PACKAGE" first-build.deb
           dpkg-deb --info "$PACKAGE"
           dpkg-deb --contents "$PACKAGE" >/dev/null
           dpkg-deb --control "$PACKAGE" control
-          grep -q '^Package: syswatch$' control/control
-          grep -q '^Version:' control/control
-          grep -q '^Depends: python3, systemd, passwd$' control/control
+          grep -Fxq 'Package: syswatch' control/control
+          grep -Fxq "Version: $VERSION" control/control
+          grep -Fxq 'Architecture: amd64' control/control
+          grep -Fxq 'Depends: python3, systemd, passwd' control/control
           test -f control/postrm
           grep -q 'User=syswatch' control/postinst
           grep -q 'ProtectSystem=strict' control/postinst
           grep -q 'CapabilityBoundingSet=' control/postinst
           grep -q 'AmbientCapabilities=' control/postinst
+
+          # Bind the checksum manifest to exactly the artifact under test.
+          EXPECTED_SUM="$(sha256sum "$PACKAGE")"
+          test "$(cat SHA256SUMS)" = "$EXPECTED_SUM"
           sha256sum --check SHA256SUMS
+
+          # Bind release metadata to the same semantic version, commit and
+          # reproducible source timestamp as the package build.
+          grep -Fxq "SYSWATCH $VERSION" RELEASE-METADATA.txt
+          grep -Fxq "Commit $RELEASE_SHA" RELEASE-METADATA.txt
+          grep -Fxq "Source-Date-Epoch $SOURCE_EPOCH" RELEASE-METADATA.txt
 
           # Rebuild through the exact same repository builder and compare bytes.
           bash packaging/build_deb.sh "$VERSION" "$RELEASE_SHA"
           cmp --silent first-build.deb "$PACKAGE"
+          test "$(cat SHA256SUMS)" = "$(sha256sum "$PACKAGE")"
       - name: Verify packaged install lifecycle
         shell: bash
         run: |
