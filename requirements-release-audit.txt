@@ -1,0 +1,2 @@
+# Release-time SBOM generator; not shipped by SYSWATCH.
+pip-audit==2.10.1
