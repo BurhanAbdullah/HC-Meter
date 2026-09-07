@@ -219,7 +219,12 @@ jobs:
           test "$(find release -maxdepth 1 -name 'syswatch-*.exe' | wc -l)" -eq 1
           test -f release/SHA256SUMS
           test -f release/SHA256SUMS-WINDOWS
-          sha256sum --check release/SHA256SUMS
+          test -f release/RELEASE-METADATA.txt
+          (
+            cd release
+            sha256sum --check SHA256SUMS
+            sha256sum --check SHA256SUMS-WINDOWS
+          )
       - name: Create verified release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
