@@ -65,6 +65,8 @@ def test_release_contract_is_versioned_reproducible_and_identity_bound():
         'cmp --silent first-build.deb "$PACKAGE"',
         'test "$(cat SHA256SUMS)" = "$(sha256sum "$PACKAGE")"',
         "requirements-windows-build.txt",
+        "SOURCE_DATE_EPOCH=$sourceEpoch",
+        "PYTHONHASHSEED=1",
         "Rebuild and verify byte-identical Windows executable",
         "$firstHash -ne $secondHash",
         "SHA256SUMS-WINDOWS",
@@ -93,6 +95,8 @@ def test_windows_build_dependency_is_pinned_audited_and_preserved_as_sbom():
 def test_windows_executable_gates_are_reproducible_and_prove_native_read_only_telemetry_path():
     reproducibility = (
         "requirements-windows-build.txt",
+        "SOURCE_DATE_EPOCH=$sourceEpoch",
+        "PYTHONHASHSEED=1",
         "first-build.exe",
         "$firstHash -ne $secondHash",
     )
