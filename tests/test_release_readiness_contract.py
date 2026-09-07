@@ -6,6 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 RELEASE = WORKFLOWS / "release.yml"
 WINDOWS = WORKFLOWS / "windows.yml"
+SECURITY = WORKFLOWS / "security.yml"
+WINDOWS_BUILD_REQUIREMENTS = ROOT / "requirements-windows-build.txt"
 README = ROOT / "README.md"
 INSTALLER = ROOT / "install.sh"
 BUILDER = ROOT / "packaging" / "build_deb.sh"
@@ -26,13 +28,14 @@ def test_release_cannot_publish_before_all_artifact_gates():
     text = RELEASE.read_text(encoding="utf-8")
     lifecycle = text.index("name: Verify packaged install lifecycle")
     debian_attest = text.index("name: Attest Debian package provenance")
+    windows_rebuild = text.index("name: Rebuild and verify byte-identical Windows executable")
     windows_smoke = text.index("name: Smoke-test released executable")
     windows_attest = text.index("name: Attest Windows executable provenance")
     publish_job = text.index("\n  publish:\n")
     publish = text.index("name: Create verified release")
 
     assert lifecycle < debian_attest < publish_job < publish
-    assert windows_smoke < windows_attest < publish_job < publish
+    assert windows_rebuild < windows_smoke < windows_attest < publish_job < publish
     assert "needs: [package, windows-package]" in text
     assert "tests/test_debian_lifecycle.sh" in text
     assert "name: syswatch-linux-release" in text
@@ -61,7 +64,11 @@ def test_release_contract_is_versioned_reproducible_and_identity_bound():
         'grep -Fxq "Source-Date-Epoch $SOURCE_EPOCH" RELEASE-METADATA.txt',
         'cmp --silent first-build.deb "$PACKAGE"',
         'test "$(cat SHA256SUMS)" = "$(sha256sum "$PACKAGE")"',
-        "pyinstaller==6.15.0",
+        "requirements-windows-build.txt",
+        "SOURCE_DATE_EPOCH=$sourceEpoch",
+        "PYTHONHASHSEED=1",
+        "Rebuild and verify byte-identical Windows executable",
+        "$firstHash -ne $secondHash",
         "SHA256SUMS-WINDOWS",
         "Smoke-test released executable and native Windows telemetry API",
     )
@@ -69,8 +76,31 @@ def test_release_contract_is_versioned_reproducible_and_identity_bound():
         assert invariant in text
 
 
-def test_windows_executable_gates_prove_native_read_only_telemetry_path():
+def test_windows_build_dependency_is_pinned_audited_and_preserved_as_sbom():
+    requirements = WINDOWS_BUILD_REQUIREMENTS.read_text(encoding="utf-8").splitlines()
+    assert requirements == ["pyinstaller==6.15.0"]
+
+    security = SECURITY.read_text(encoding="utf-8")
     required = (
+        "requirements-windows-build.txt",
+        "windows-build-dependency-sbom.cdx.json",
+        "python -m pip_audit -r requirements-windows-build.txt",
+        "name: Preserve supply-chain SBOM evidence",
+        "syswatch-sboms-${{ github.sha }}",
+    )
+    for invariant in required:
+        assert invariant in security
+
+
+def test_windows_executable_gates_are_reproducible_and_prove_native_read_only_telemetry_path():
+    reproducibility = (
+        "requirements-windows-build.txt",
+        "SOURCE_DATE_EPOCH=$sourceEpoch",
+        "PYTHONHASHSEED=1",
+        "first-build.exe",
+        "$firstHash -ne $secondHash",
+    )
+    telemetry = (
         "$health.agent -eq 'online'",
         "$metrics.platform -notmatch 'Windows'",
         "$metrics.firewall.backend -ne 'windows-defender-firewall'",
@@ -81,8 +111,8 @@ def test_windows_executable_gates_prove_native_read_only_telemetry_path():
     )
     for path in (WINDOWS, RELEASE):
         text = path.read_text(encoding="utf-8")
-        for invariant in required:
-            assert invariant in text, f"{path.name} missing Windows native telemetry gate: {invariant}"
+        for invariant in reproducibility + telemetry:
+            assert invariant in text, f"{path.name} missing Windows release gate: {invariant}"
 
 
 def test_service_release_boundary_is_non_privileged():
