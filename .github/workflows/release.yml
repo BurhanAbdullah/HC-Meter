@@ -148,7 +148,7 @@ jobs:
           $hash = (Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $(Split-Path $target -Leaf)" | Out-File -Encoding ascii SHA256SUMS-WINDOWS
           "Windows executable SHA256: $hash"
-      - name: Smoke-test released executable
+      - name: Smoke-test released executable and native Windows telemetry API
         shell: pwsh
         run: |
           $exe = Join-Path $PWD "syswatch-${{ steps.release.outputs.version }}-windows-x64.exe"
@@ -163,10 +163,19 @@ jobs:
               } catch {}
             }
             if (!$healthy) { throw 'Windows release executable failed the health contract' }
+
             $metrics = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/metrics' -Headers @{ Host = '127.0.0.1:8080' }
-            if (!$metrics.hostname -or !$metrics.firewall) { throw 'Windows release metrics contract incomplete' }
+            if (!$metrics.hostname) { throw 'Windows release hostname telemetry is missing' }
+            if ($metrics.platform -notmatch 'Windows') { throw "Native Windows release platform telemetry missing: $($metrics.platform)" }
+            if ($metrics.firewall.backend -ne 'windows-defender-firewall') { throw "Native Windows release firewall backend not selected: $($metrics.firewall.backend)" }
+            if ($metrics.firewall.status -notin @('ACTIVE', 'REVIEW', 'UNKNOWN')) { throw "Invalid Windows release firewall status: $($metrics.firewall.status)" }
+            if ($null -eq $metrics.cpu -or $metrics.cpu -lt 0 -or $metrics.cpu -gt 100) { throw 'Windows release CPU telemetry invalid' }
+            if ($null -eq $metrics.memory -or $metrics.memory -lt 0 -or $metrics.memory -gt 100) { throw 'Windows release memory telemetry invalid' }
+
             $processes = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/processes' -Headers @{ Host = '127.0.0.1:8080' }
-            if ($null -eq $processes.processes) { throw 'Windows release process contract incomplete' }
+            if ($null -eq $processes.processes -or @($processes.processes).Count -lt 1) { throw 'Native Windows release process telemetry is empty' }
+            $sample = @($processes.processes)[0]
+            if ($null -eq $sample.pid -or !$sample.name) { throw 'Native Windows release process telemetry contract incomplete' }
           } finally {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           }
