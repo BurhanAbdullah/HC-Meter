@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d)"
 GOOD="$TMP/good"
 BAD="$TMP/bad"
+FIXTURE_REF="ci-fixture"
 
 host_cleanup() {
   set +e
@@ -37,9 +38,12 @@ assert_absent() {
 host_cleanup
 
 # Build local repositories so the lifecycle test never depends on an external
-# network clone after checkout.
+# network clone after checkout. Pull-request checkouts use a detached synthetic
+# merge commit, so create an explicit fixture ref instead of assuming `main`
+# exists in the local clone or identifies the checked-out code.
 git clone -q "$ROOT" "$GOOD"
 git clone -q "$ROOT" "$BAD"
+git -C "$GOOD" branch -f "$FIXTURE_REF" HEAD
 git -C "$BAD" config user.name "SYSWATCH CI"
 git -C "$BAD" config user.email "ci@example.invalid"
 python3 - "$BAD/syswatch/api/server.py" <<'PY'
@@ -55,9 +59,10 @@ path.write_text(text.replace(old, new, 1), encoding="utf-8")
 PY
 git -C "$BAD" add syswatch/api/server.py
 git -C "$BAD" commit -q -m "test fixture: unhealthy service"
+git -C "$BAD" branch -f "$FIXTURE_REF" HEAD
 
 # 1. Failed first install must return the runner to the exact no-install state.
-if sudo env SYSWATCH_REPO="$BAD" SYSWATCH_REF=main SYSWATCH_INSTALL_HEALTH_ATTEMPTS=3 bash "$ROOT/install.sh"; then
+if sudo env SYSWATCH_REPO="$BAD" SYSWATCH_REF="$FIXTURE_REF" SYSWATCH_INSTALL_HEALTH_ATTEMPTS=3 bash "$ROOT/install.sh"; then
   echo "unhealthy first install unexpectedly succeeded" >&2
   exit 1
 fi
@@ -70,7 +75,7 @@ assert_absent /usr/local/bin/syswatch-signal
 ! getent group syswatch >/dev/null
 
 # 2. Establish a known-good installation and persistent state.
-sudo env SYSWATCH_REPO="$GOOD" SYSWATCH_REF=main bash "$ROOT/install.sh"
+sudo env SYSWATCH_REPO="$GOOD" SYSWATCH_REF="$FIXTURE_REF" bash "$ROOT/install.sh"
 sudo systemctl is-enabled syswatch.service >/dev/null
 sudo systemctl is-active syswatch.service >/dev/null
 python3 - <<'PY'
@@ -90,7 +95,7 @@ cp /usr/local/bin/syswatch "$TMP/bin.before"
 cp /usr/local/bin/syswatch-signal "$TMP/signal.before"
 
 # 3. A failed upgrade must restore code, state, wrappers, unit and runtime state.
-if sudo env SYSWATCH_REPO="$BAD" SYSWATCH_REF=main SYSWATCH_INSTALL_HEALTH_ATTEMPTS=3 bash "$ROOT/install.sh"; then
+if sudo env SYSWATCH_REPO="$BAD" SYSWATCH_REF="$FIXTURE_REF" SYSWATCH_INSTALL_HEALTH_ATTEMPTS=3 bash "$ROOT/install.sh"; then
   echo "unhealthy upgrade unexpectedly succeeded" >&2
   exit 1
 fi
