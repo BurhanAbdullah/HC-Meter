@@ -5,6 +5,7 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 RELEASE = WORKFLOWS / "release.yml"
+WINDOWS = WORKFLOWS / "windows.yml"
 README = ROOT / "README.md"
 INSTALLER = ROOT / "install.sh"
 BUILDER = ROOT / "packaging" / "build_deb.sh"
@@ -62,10 +63,26 @@ def test_release_contract_is_versioned_reproducible_and_identity_bound():
         'test "$(cat SHA256SUMS)" = "$(sha256sum "$PACKAGE")"',
         "pyinstaller==6.15.0",
         "SHA256SUMS-WINDOWS",
-        "Smoke-test released executable",
+        "Smoke-test released executable and native Windows telemetry API",
     )
     for invariant in required:
         assert invariant in text
+
+
+def test_windows_executable_gates_prove_native_read_only_telemetry_path():
+    required = (
+        "$health.agent -eq 'online'",
+        "$metrics.platform -notmatch 'Windows'",
+        "$metrics.firewall.backend -ne 'windows-defender-firewall'",
+        "$metrics.cpu -lt 0 -or $metrics.cpu -gt 100",
+        "$metrics.memory -lt 0 -or $metrics.memory -gt 100",
+        "@($processes.processes).Count -lt 1",
+        "$null -eq $sample.pid -or !$sample.name",
+    )
+    for path in (WINDOWS, RELEASE):
+        text = path.read_text(encoding="utf-8")
+        for invariant in required:
+            assert invariant in text, f"{path.name} missing Windows native telemetry gate: {invariant}"
 
 
 def test_service_release_boundary_is_non_privileged():

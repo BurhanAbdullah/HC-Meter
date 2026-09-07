@@ -35,7 +35,7 @@ jobs:
           if (!(Test-Path $exe)) { throw 'syswatch.exe was not produced' }
           $hash = (Get-FileHash $exe -Algorithm SHA256).Hash
           "SYSWATCH Windows executable SHA256: $hash"
-      - name: Smoke-test executable and localhost API
+      - name: Smoke-test executable and native Windows telemetry API
         shell: pwsh
         run: |
           $exe = Join-Path $PWD 'dist\syswatch.exe'
@@ -46,14 +46,23 @@ jobs:
               Start-Sleep -Milliseconds 500
               try {
                 $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/health' -Headers @{ Host = '127.0.0.1:8080' }
-                if ($health.ok -eq $true -and $health.service -eq 'syswatch') { $healthy = $true; break }
+                if ($health.ok -eq $true -and $health.service -eq 'syswatch' -and $health.agent -eq 'online') { $healthy = $true; break }
               } catch {}
             }
             if (!$healthy) { throw 'Windows executable did not expose the expected local health contract' }
+
             $metrics = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/metrics' -Headers @{ Host = '127.0.0.1:8080' }
-            if ($null -eq $metrics.hostname -or $null -eq $metrics.firewall) { throw 'Windows metrics contract incomplete' }
+            if (!$metrics.hostname) { throw 'Windows hostname telemetry is missing' }
+            if ($metrics.platform -notmatch 'Windows') { throw "Native Windows platform telemetry missing: $($metrics.platform)" }
+            if ($metrics.firewall.backend -ne 'windows-defender-firewall') { throw "Native Windows firewall backend not selected: $($metrics.firewall.backend)" }
+            if ($metrics.firewall.status -notin @('ACTIVE', 'REVIEW', 'UNKNOWN')) { throw "Invalid Windows firewall status: $($metrics.firewall.status)" }
+            if ($null -eq $metrics.cpu -or $metrics.cpu -lt 0 -or $metrics.cpu -gt 100) { throw 'Windows CPU telemetry invalid' }
+            if ($null -eq $metrics.memory -or $metrics.memory -lt 0 -or $metrics.memory -gt 100) { throw 'Windows memory telemetry invalid' }
+
             $processes = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/processes' -Headers @{ Host = '127.0.0.1:8080' }
-            if ($null -eq $processes.processes) { throw 'Windows process contract incomplete' }
+            if ($null -eq $processes.processes -or @($processes.processes).Count -lt 1) { throw 'Native Windows process telemetry is empty' }
+            $sample = @($processes.processes)[0]
+            if ($null -eq $sample.pid -or !$sample.name) { throw 'Native Windows process telemetry contract incomplete' }
           } finally {
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           }
