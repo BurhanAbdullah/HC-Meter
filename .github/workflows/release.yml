@@ -135,6 +135,13 @@ jobs:
       - name: Install pinned Windows build dependency
         shell: pwsh
         run: python -m pip install --disable-pip-version-check -r requirements-windows-build.txt
+      - name: Set deterministic Windows release build environment
+        shell: pwsh
+        run: |
+          $sourceEpoch = (git show -s --format=%ct HEAD).Trim()
+          "SOURCE_DATE_EPOCH=$sourceEpoch" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "PYTHONHASHSEED=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "Reproducible release build epoch: $sourceEpoch"
       - name: Build first one-file Windows executable
         shell: pwsh
         run: |
