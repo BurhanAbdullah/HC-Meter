@@ -47,6 +47,20 @@ jobs:
           RELEASE_SHA="$(git rev-list -n 1 "refs/tags/${{ steps.release.outputs.ref_name }}")"
           test "$RELEASE_SHA" = "$(git rev-parse HEAD)"
           echo "release_sha=$RELEASE_SHA" >> "$GITHUB_ENV"
+      - name: Set up Python for release SBOM generation
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+      - name: Install pinned release audit dependency
+        run: python -m pip install --disable-pip-version-check -r requirements-release-audit.txt
+      - name: Generate release build SBOM evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip_audit -r requirements-windows-build.txt --format cyclonedx-json --output WINDOWS-BUILD-SBOM.cdx.json
+          python -m pip_audit -r requirements-release-audit.txt --format cyclonedx-json --output RELEASE-AUDIT-SBOM.cdx.json
+          test -s WINDOWS-BUILD-SBOM.cdx.json
+          test -s RELEASE-AUDIT-SBOM.cdx.json
       - name: Build Debian package with shared builder
         shell: bash
         run: |
@@ -99,6 +113,8 @@ jobs:
             syswatch_*.deb
             SHA256SUMS
             RELEASE-METADATA.txt
+            WINDOWS-BUILD-SBOM.cdx.json
+            RELEASE-AUDIT-SBOM.cdx.json
 
   windows-package:
     needs: package
@@ -135,6 +151,16 @@ jobs:
       - name: Install pinned Windows build dependency
         shell: pwsh
         run: python -m pip install --disable-pip-version-check -r requirements-windows-build.txt
+      - name: Install pinned release audit dependency
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check -r requirements-release-audit.txt
+      - name: Generate Windows release SBOM evidence
+        shell: pwsh
+        run: |
+          python -m pip_audit -r requirements-windows-build.txt --format cyclonedx-json --output WINDOWS-BUILD-SBOM.cdx.json
+          python -m pip_audit -r requirements-release-audit.txt --format cyclonedx-json --output RELEASE-AUDIT-SBOM-WINDOWS.cdx.json
+          if (!(Test-Path -Path WINDOWS-BUILD-SBOM.cdx.json) -or (Get-Item WINDOWS-BUILD-SBOM.cdx.json).Length -eq 0) { throw 'Windows build SBOM is empty' }
+          if (!(Test-Path -Path RELEASE-AUDIT-SBOM-WINDOWS.cdx.json) -or (Get-Item RELEASE-AUDIT-SBOM-WINDOWS.cdx.json).Length -eq 0) { throw 'Windows release audit SBOM is empty' }
       - name: Set deterministic Windows release build environment
         shell: pwsh
         run: |
@@ -211,6 +237,8 @@ jobs:
           path: |
             syswatch-*.exe
             SHA256SUMS-WINDOWS
+            WINDOWS-BUILD-SBOM.cdx.json
+            RELEASE-AUDIT-SBOM-WINDOWS.cdx.json
 
   publish:
     needs: [package, windows-package]
@@ -249,6 +277,9 @@ jobs:
           test -f release/SHA256SUMS
           test -f release/SHA256SUMS-WINDOWS
           test -f release/RELEASE-METADATA.txt
+          test -f release/WINDOWS-BUILD-SBOM.cdx.json
+          test -f release/RELEASE-AUDIT-SBOM.cdx.json
+          test -f release/RELEASE-AUDIT-SBOM-WINDOWS.cdx.json
           (
             cd release
             sha256sum --check SHA256SUMS
@@ -265,3 +296,6 @@ jobs:
             release/SHA256SUMS-WINDOWS
             release/RELEASE-METADATA.txt
             release/syswatch-*.exe
+            release/WINDOWS-BUILD-SBOM.cdx.json
+            release/RELEASE-AUDIT-SBOM.cdx.json
+            release/RELEASE-AUDIT-SBOM-WINDOWS.cdx.json
