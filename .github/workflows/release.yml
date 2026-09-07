@@ -72,19 +72,12 @@ jobs:
           grep -q 'ProtectSystem=strict' control/postinst
           grep -q 'CapabilityBoundingSet=' control/postinst
           grep -q 'AmbientCapabilities=' control/postinst
-
-          # Bind the checksum manifest to exactly the artifact under test.
           EXPECTED_SUM="$(sha256sum "$PACKAGE")"
           test "$(cat SHA256SUMS)" = "$EXPECTED_SUM"
           sha256sum --check SHA256SUMS
-
-          # Bind release metadata to the same semantic version, commit and
-          # reproducible source timestamp as the package build.
           grep -Fxq "SYSWATCH $VERSION" RELEASE-METADATA.txt
           grep -Fxq "Commit $RELEASE_SHA" RELEASE-METADATA.txt
           grep -Fxq "Source-Date-Epoch $SOURCE_EPOCH" RELEASE-METADATA.txt
-
-          # Rebuild through the exact same repository builder and compare bytes.
           bash packaging/build_deb.sh "$VERSION" "$RELEASE_SHA"
           cmp --silent first-build.deb "$PACKAGE"
           test "$(cat SHA256SUMS)" = "$(sha256sum "$PACKAGE")"
@@ -106,3 +99,85 @@ jobs:
             syswatch_*.deb
             SHA256SUMS
             RELEASE-METADATA.txt
+
+  windows-package:
+    needs: package
+    runs-on: windows-2025
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Resolve release ref
+        id: release
+        shell: pwsh
+        run: |
+          $ref = if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') { '${{ inputs.release_tag }}' } else { $env:GITHUB_REF_NAME }
+          if ($ref -notmatch '^v\d+\.\d+\.\d+$') { throw "Invalid release tag: $ref" }
+          "ref_name=$ref" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "version=$($ref.Substring(1))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+      - name: Checkout exact release tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ steps.release.outputs.ref_name }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate tag commit identity
+        shell: pwsh
+        run: |
+          $tagSha = (git rev-list -n 1 "refs/tags/${{ steps.release.outputs.ref_name }}").Trim()
+          $headSha = (git rev-parse HEAD).Trim()
+          if ($tagSha -ne $headSha) { throw "Release tag does not point to checked-out commit" }
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned PyInstaller
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check pyinstaller==6.15.0
+      - name: Build one-file Windows executable
+        shell: pwsh
+        run: python -m PyInstaller --clean --noconfirm packaging/syswatch_windows.spec
+      - name: Rename and checksum executable
+        shell: pwsh
+        run: |
+          $version = '${{ steps.release.outputs.version }}'
+          $source = Join-Path $PWD 'dist\syswatch.exe'
+          $target = Join-Path $PWD "syswatch-$version-windows-x64.exe"
+          Copy-Item $source $target
+          $hash = (Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path $target -Leaf)" | Out-File -Encoding ascii SHA256SUMS-WINDOWS
+          "Windows executable SHA256: $hash"
+      - name: Smoke-test released executable
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD "syswatch-${{ steps.release.outputs.version }}-windows-x64.exe"
+          $proc = Start-Process -FilePath $exe -PassThru -WindowStyle Hidden
+          try {
+            $healthy = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Milliseconds 500
+              try {
+                $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/health' -Headers @{ Host = '127.0.0.1:8080' }
+                if ($health.ok -eq $true -and $health.service -eq 'syswatch' -and $health.agent -eq 'online') { $healthy = $true; break }
+              } catch {}
+            }
+            if (!$healthy) { throw 'Windows release executable failed the health contract' }
+            $metrics = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/metrics' -Headers @{ Host = '127.0.0.1:8080' }
+            if (!$metrics.hostname -or !$metrics.firewall) { throw 'Windows release metrics contract incomplete' }
+            $processes = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/api/processes' -Headers @{ Host = '127.0.0.1:8080' }
+            if ($null -eq $processes.processes) { throw 'Windows release process contract incomplete' }
+          } finally {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }
+      - name: Attest Windows executable provenance
+        uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
+        with:
+          subject-path: 'syswatch-*.exe'
+      - name: Attach Windows executable to release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ steps.release.outputs.ref_name }}
+          files: |
+            syswatch-*.exe
+            SHA256SUMS-WINDOWS
