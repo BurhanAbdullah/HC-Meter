@@ -17,7 +17,7 @@ jobs:
   package:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       id-token: write
       attestations: write
     steps:
@@ -90,12 +90,12 @@ jobs:
         uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:
           subject-path: 'syswatch_*.deb'
-      - name: Create release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+      - name: Stage Debian release artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          tag_name: ${{ steps.release.outputs.ref_name }}
-          generate_release_notes: true
-          files: |
+          name: syswatch-linux-release
+          if-no-files-found: error
+          path: |
             syswatch_*.deb
             SHA256SUMS
             RELEASE-METADATA.txt
@@ -104,7 +104,7 @@ jobs:
     needs: package
     runs-on: windows-2025
     permissions:
-      contents: write
+      contents: read
       id-token: write
       attestations: write
     steps:
@@ -174,10 +174,65 @@ jobs:
         uses: actions/attest-build-provenance@00014ed6ed5efc5b1ab7f7f34a39eb55d41aa4f8 # v3.1.0
         with:
           subject-path: 'syswatch-*.exe'
-      - name: Attach Windows executable to release
+      - name: Stage Windows release artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: syswatch-windows-release
+          if-no-files-found: error
+          path: |
+            syswatch-*.exe
+            SHA256SUMS-WINDOWS
+
+  publish:
+    needs: [package, windows-package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Resolve release ref
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            REF_NAME="${{ inputs.release_tag }}"
+          else
+            REF_NAME="${GITHUB_REF_NAME}"
+          fi
+          [[ "$REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "ref_name=$REF_NAME" >> "$GITHUB_OUTPUT"
+      - name: Download Debian release artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: syswatch-linux-release
+          path: release
+      - name: Download Windows release artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: syswatch-windows-release
+          path: release
+      - name: Verify staged release contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find release -maxdepth 1 -name 'syswatch_*.deb' | wc -l)" -eq 1
+          test "$(find release -maxdepth 1 -name 'syswatch-*.exe' | wc -l)" -eq 1
+          test -f release/SHA256SUMS
+          test -f release/SHA256SUMS-WINDOWS
+          test -f release/RELEASE-METADATA.txt
+          (
+            cd release
+            sha256sum --check SHA256SUMS
+            sha256sum --check SHA256SUMS-WINDOWS
+          )
+      - name: Create verified release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ steps.release.outputs.ref_name }}
+          generate_release_notes: true
           files: |
-            syswatch-*.exe
-            SHA256SUMS-WINDOWS
+            release/syswatch_*.deb
+            release/SHA256SUMS
+            release/SHA256SUMS-WINDOWS
+            release/RELEASE-METADATA.txt
+            release/syswatch-*.exe

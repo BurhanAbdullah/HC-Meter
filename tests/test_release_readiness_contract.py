@@ -21,13 +21,23 @@ def test_all_workflow_actions_are_immutable():
     assert not bad, "Unpinned GitHub Actions: " + ", ".join(bad)
 
 
-def test_release_cannot_publish_before_artifact_lifecycle_gate():
+def test_release_cannot_publish_before_all_artifact_gates():
     text = RELEASE.read_text(encoding="utf-8")
     lifecycle = text.index("name: Verify packaged install lifecycle")
-    attest = text.index("name: Attest Debian package provenance")
-    publish = text.index("name: Create release")
-    assert lifecycle < attest < publish
+    debian_attest = text.index("name: Attest Debian package provenance")
+    windows_smoke = text.index("name: Smoke-test released executable")
+    windows_attest = text.index("name: Attest Windows executable provenance")
+    publish_job = text.index("\n  publish:\n")
+    publish = text.index("name: Create verified release")
+
+    assert lifecycle < debian_attest < publish_job < publish
+    assert windows_smoke < windows_attest < publish_job < publish
+    assert "needs: [package, windows-package]" in text
     assert "tests/test_debian_lifecycle.sh" in text
+    assert "name: syswatch-linux-release" in text
+    assert "name: syswatch-windows-release" in text
+    assert "sha256sum --check SHA256SUMS" in text
+    assert "sha256sum --check SHA256SUMS-WINDOWS" in text
 
 
 def test_release_contract_is_versioned_reproducible_and_identity_bound():
@@ -50,6 +60,9 @@ def test_release_contract_is_versioned_reproducible_and_identity_bound():
         'grep -Fxq "Source-Date-Epoch $SOURCE_EPOCH" RELEASE-METADATA.txt',
         'cmp --silent first-build.deb "$PACKAGE"',
         'test "$(cat SHA256SUMS)" = "$(sha256sum "$PACKAGE")"',
+        "pyinstaller==6.15.0",
+        "SHA256SUMS-WINDOWS",
+        "Smoke-test released executable",
     )
     for invariant in required:
         assert invariant in text
